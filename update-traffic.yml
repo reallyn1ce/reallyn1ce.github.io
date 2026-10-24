@@ -1,6 +1,8 @@
 name: Update traffic
 
 on:
+  # Проверяем источник ежедневно: если HypeStat обновит оценку в течение месяца,
+  # обновим точку этого месяца. В истории при этом остаётся максимум одна точка/месяц.
   schedule:
     - cron: '17 5 * * *'
   workflow_dispatch:
@@ -16,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Fetch traffic
+      - name: Fetch monthly traffic estimate from HypeStat
         run: node scripts/fetch-traffic.js
       - name: Commit if changed
         run: |
@@ -24,8 +26,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/traffic.json
           if git diff --staged --quiet; then
-            echo "Нет изменений"
+            echo "Нет новых данных для коммита"
           else
-            git commit -m "chore: update traffic data"
+            git commit -m "chore: update monthly traffic data"
             git push
           fi

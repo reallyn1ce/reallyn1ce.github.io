@@ -51,8 +51,17 @@ body::before{
 }
 .hero-cap{margin-top:8px;color:var(--text2);font-size:16px}
 .src{font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-left:8px}
+.range{display:flex;gap:6px;margin-top:24px}
+.range[hidden]{display:none}
+.range button{
+  font-family:var(--font-mono);font-size:12px;color:var(--text2);background:transparent;
+  border:1px solid var(--border);border-radius:999px;padding:7px 14px;min-height:36px;cursor:pointer;
+  transition:background-color var(--dur),color var(--dur),border-color var(--dur);
+}
+.range button:hover{border-color:var(--text3);color:var(--text)}
+.range button.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700}
 .chart{
-  position:relative;margin-top:24px;background:var(--bg-card);border:1px solid var(--border-soft);
+  position:relative;margin-top:12px;background:var(--bg-card);border:1px solid var(--border-soft);
   border-radius:12px;padding:8px 4px 4px;transition:background-color var(--dur),border-color var(--dur);
 }
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
@@ -108,3 +117,5 @@ body::before{
 .footer{max-width:720px;margin:0 auto;padding:16px 16px 32px;font-size:12px;color:var(--text3);border-top:1px solid var(--border-soft)}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.chart-note{margin:8px 4px 0;color:var(--text3);font-size:12px;line-height:1.5;text-align:center}

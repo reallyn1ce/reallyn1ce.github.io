@@ -66,6 +66,34 @@
   /* ---------- Hero + график ---------- */
   let trafficPts = [];
   const chartWrap = $('#chart');
+  const rangeBox = $('#range');
+  let range = store.get('archive-range');
+  if (!['30', '365', 'all'].includes(range)) range = 'all';
+
+  // Период считается от последнего замера, чтобы график не пустел, если данные давно не обновлялись
+  function visiblePts() {
+    if (range === 'all' || !trafficPts.length) return trafficPts;
+    const from = Date.parse(trafficPts[trafficPts.length - 1].date) - Number(range) * 864e5;
+    return trafficPts.filter((p) => Date.parse(p.date) >= from);
+  }
+
+  function syncRange() {
+    rangeBox.hidden = trafficPts.length < 2;
+    rangeBox.querySelectorAll('button').forEach((b) => {
+      const on = b.dataset.range === range;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+  }
+
+  rangeBox.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-range]');
+    if (!b) return;
+    range = b.dataset.range;
+    store.set('archive-range', range);
+    syncRange();
+    drawChart();
+  });
 
   function renderHero() {
     const last = trafficPts[trafficPts.length - 1];
@@ -83,7 +111,7 @@
 
   function drawChart() {
     chartWrap.textContent = '';
-    const pts = trafficPts;
+    const pts = visiblePts();
     if (!pts.length) {
       chartWrap.appendChild(el('div', 'chart-empty', 'График появится после первого замера'));
       return;
@@ -125,9 +153,9 @@
       svg.appendChild(tx);
     });
 
-    if (n >= 3) {
-      const d = pts.map((p, i) => `${i ? 'L' : 'M'}${xOf(i).toFixed(1)} ${yOf(p.value).toFixed(1)}`).join('');
-      svg.appendChild(svgEl('path', { class: 'area', d: `${d}L${xOf(n - 1).toFixed(1)} ${pad.t + ih}L${xOf(0).toFixed(1)} ${pad.t + ih}Z` }));
+    if (n >= 2) {
+      const d = pts.map((p, i) => `${i ? 'L' : 'M'}${xOf(i).toFixed(1)} ${yOf(p.value).toFixed(1)}`).join(' ');
+      if (n >= 3) svg.appendChild(svgEl('path', { class: 'area', d: `${d} L${xOf(n - 1).toFixed(1)} ${pad.t + ih} L${xOf(0).toFixed(1)} ${pad.t + ih} Z` }));
       svg.appendChild(svgEl('path', { class: 'line', d }));
     }
 
@@ -160,6 +188,7 @@
     });
 
     chartWrap.appendChild(svg);
+    if (n === 1) chartWrap.appendChild(el('p', 'chart-note', 'Пока есть только один месячный замер. Линия динамики появится после следующего обновления HypeStat.'));
     chartWrap.appendChild(tip);
   }
 
@@ -218,6 +247,7 @@
     ]);
     trafficPts = cleanTraffic(traffic);
     renderHero();
+    syncRange();
     drawChart();
     renderTimeline(events);
     renderCommunities(communities);
