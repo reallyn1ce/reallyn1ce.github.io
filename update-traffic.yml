@@ -24,10 +24,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/traffic.json
+          git add data/traffic.json data/meta.json
           if git diff --staged --quiet; then
             echo "Нет новых данных для коммита"
           else
-            git commit -m "chore: update monthly traffic data"
+            git commit -m "chore: refresh traffic check metadata"
             git push
           fi

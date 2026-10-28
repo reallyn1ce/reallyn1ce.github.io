@@ -7,6 +7,7 @@ const path = require('path');
 
 const PAGE = 'https://hypestat.com/info/kogama.com';
 const FILE = path.join(__dirname, '..', 'data', 'traffic.json');
+const META_FILE = path.join(__dirname, '..', 'data', 'meta.json');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 function get(url, redirects = 4) {
@@ -82,20 +83,32 @@ function monthKey(date) { return date.slice(0, 7); }
   if (!Array.isArray(data)) data = [];
   data = data.filter(p => p && /^\d{4}-\d{2}-\d{2}$/.test(p.date || '') && Number.isFinite(Number(p.value)) && Number(p.value) > 0);
 
-  // Migrate/dedupe to one point per month, retaining the most recent record for each month.
+  // Keep one point per month, retaining the latest valid record for each month.
   const byMonth = new Map();
   data.sort((a, b) => a.date.localeCompare(b.date));
-  for (const p of data) byMonth.set(monthKey(p.date), { date: p.date, value: Number(p.value), source: p.source || 'HypeStat' });
+  for (const p of data) byMonth.set(monthKey(p.date), { date: p.date, value: Number(p.value), source: p.source || 'HypeStat', ...(typeof p.archiveUrl === 'string' ? { archiveUrl: p.archiveUrl } : {}) });
 
   const existing = byMonth.get(month);
-  if (existing && existing.value === value) {
-    console.log(`Без изменений: ${month}, ${value} monthly visits. Одна точка за месяц сохранена.`);
-    return;
+  const changed = !existing || existing.value !== value;
+  if (changed) {
+    byMonth.set(month, { date, value, source: 'HypeStat' });
+    const result = [...byMonth.values()].sort((a, b) => a.date.localeCompare(b.date));
+    fs.writeFileSync(FILE, JSON.stringify(result, null, 2) + '\n');
+    console.log(`${existing ? 'Обновлена' : 'Добавлена'} точка за ${month}: ${value} monthly visits.`);
+  } else {
+    console.log(`Без изменений: ${month}, ${value} monthly visits. Точка за месяц сохранена.`);
   }
-  byMonth.set(month, { date, value, source: 'HypeStat' });
-  const result = [...byMonth.values()].sort((a, b) => a.date.localeCompare(b.date));
-  fs.writeFileSync(FILE, JSON.stringify(result, null, 2) + '\n');
-  console.log(`${existing ? 'Обновлена' : 'Добавлена'} точка за ${month}: ${value} monthly visits.`);
+
+  // This file records only successful checks. If the workflow fails, it is not advanced.
+  let meta = {};
+  try { meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch {}
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
+  meta.source = 'HypeStat';
+  meta.lastChecked = date;
+  if (changed) meta.lastValueUpdated = date;
+  if (!meta.lastValueUpdated && existing) meta.lastValueUpdated = existing.date;
+  fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2) + '\n');
+  console.log(`Успешная проверка источника: ${date}.`);
 })().catch(err => {
   console.error('ОШИБКА сбора статистики:', err.message);
   process.exitCode = 1;

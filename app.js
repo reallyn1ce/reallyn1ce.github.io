@@ -46,6 +46,15 @@
     } catch { return fallback; }
   }
 
+  async function loadMeta(path) {
+    try {
+      const r = await fetch(path, { cache: 'no-cache' });
+      if (!r.ok) throw new Error(r.status);
+      const d = await r.json();
+      return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+    } catch { return {}; }
+  }
+
   const fmtNum = (n) => Math.round(n).toLocaleString('ru-RU');
   const fmtLong = (iso) => new Date(iso + 'T00:00:00Z')
     .toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -58,7 +67,7 @@
       if (!p || typeof p.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.date)) continue;
       const v = Number(p.value);
       if (!Number.isFinite(v) || v < 0 || Number.isNaN(Date.parse(p.date))) continue;
-      byDate.set(p.date, { date: p.date, value: v, source: p.source || 'HypeStat' });
+      byDate.set(p.date, { date: p.date, value: v, source: p.source || 'HypeStat', ...(typeof p.archiveUrl === 'string' ? { archiveUrl: p.archiveUrl } : {}) });
     }
     return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   }
@@ -68,13 +77,14 @@
   const chartWrap = $('#chart');
   const rangeBox = $('#range');
   let range = store.get('archive-range');
-  if (!['30', '365', 'all'].includes(range)) range = 'all';
+  if (!['30', '182', '365', 'all'].includes(range)) range = 'all';
 
   // Период считается от последнего замера, чтобы график не пустел, если данные давно не обновлялись
   function visiblePts() {
     if (range === 'all' || !trafficPts.length) return trafficPts;
     const from = Date.parse(trafficPts[trafficPts.length - 1].date) - Number(range) * 864e5;
-    return trafficPts.filter((p) => Date.parse(p.date) >= from);
+    const f = trafficPts.filter((p) => Date.parse(p.date) >= from);
+    return f.length < 2 ? trafficPts.slice(-2) : f; // замеры раз в месяц — короткий период не должен давать пустоту
   }
 
   function syncRange() {
@@ -95,20 +105,76 @@
     drawChart();
   });
 
-  function renderHero() {
+  function renderHero(meta = {}) {
     const last = trafficPts[trafficPts.length - 1];
+    const heroNum = $('#heroNum');
+    const heroMeta = $('#heroMeta');
+    const status = $('#dataStatus');
+
     if (!last) {
-      $('#heroNum').textContent = '—';
-      $('#heroMeta').textContent = 'Данных пока нет';
+      heroNum.textContent = '—';
+      heroMeta.textContent = 'Данных пока нет';
+    } else {
+      heroNum.textContent = fmtNum(last.value);
+      heroMeta.textContent = `Последний сохранённый замер: ${fmtLong(last.date)} · источник: ${last.source}`;
+    }
+
+    const checked = typeof meta.lastChecked === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(meta.lastChecked)
+      ? meta.lastChecked : null;
+    if (!checked) {
+      status.className = 'data-status is-unknown';
+      status.textContent = 'Статус проверки источника пока недоступен.';
       return;
     }
-    $('#heroNum').textContent = fmtNum(last.value);
-    $('#heroMeta').textContent = `Последний замер: ${fmtLong(last.date)} · источник: ${last.source}`;
+
+    const ageDays = Math.floor((Date.now() - Date.parse(checked + 'T00:00:00Z')) / 864e5);
+    if (ageDays <= 3) {
+      status.className = 'data-status is-fresh';
+      status.textContent = `Источник проверен успешно: ${fmtLong(checked)}.`;
+    } else {
+      status.className = 'data-status is-stale';
+      status.textContent = `Последняя успешная проверка: ${fmtLong(checked)}. Данные могут быть устаревшими — проверьте GitHub Actions.`;
+    }
   }
 
-  const fmtY = (v, fine) => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M'
-    : v >= 1000 ? (v / 1000).toFixed(fine ? 1 : 0) + 'K' : String(Math.round(v));
+  const fmtY = (v) => v >= 1e6 ? +(v / 1e6).toFixed(2) + 'M'
+    : v >= 1000 ? +(v / 1000).toFixed(1) + 'K' : String(Math.round(v));
 
+  function niceScale(max, ticks) {
+    const raw = (max || 1) / ticks;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / mag;
+    const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
+    return { step, top: Math.ceil(max / step - 1e-9) * step };
+  }
+
+  // Вертикальные линии сетки: годы / месяцы / недели в зависимости от охвата
+  function timeMarks(t0, t1) {
+    const days = (t1 - t0) / 864e5, out = [];
+    if (days < 1) return out;
+    const d0 = new Date(t0);
+    if (days > 400) {
+      for (let y = d0.getUTCFullYear() + 1; Date.UTC(y, 0, 1) <= t1; y++)
+        out.push({ t: Date.UTC(y, 0, 1), label: String(y) });
+    } else if (days > 50) {
+      let y = d0.getUTCFullYear(), m = d0.getUTCMonth() + 1;
+      for (;; m++) {
+        const t = Date.UTC(y, m, 1);
+        if (t > t1) break;
+        const mm = new Date(t);
+        out.push({ t, label: mm.getUTCMonth() === 0 ? String(mm.getUTCFullYear())
+          : mm.toLocaleDateString('ru-RU', { month: 'short', timeZone: 'UTC' }).replace('.', '') });
+      }
+      if (out.length > 6) return out.filter((_, i) => i % 2 === 0);
+    } else {
+      const step = 7 * 864e5;
+      for (let t = t0 + step; t <= t1; t += step)
+        out.push({ t, label: fmtShort(new Date(t).toISOString().slice(0, 10)).slice(0, 5) });
+    }
+    return out;
+  }
+
+  let gradSeq = 0;
   function drawChart() {
     chartWrap.textContent = '';
     const pts = visiblePts();
@@ -116,84 +182,118 @@
       chartWrap.appendChild(el('div', 'chart-empty', 'График появится после первого замера'));
       return;
     }
-    const W = Math.max(chartWrap.clientWidth - 8, 240);
-    const H = W < 420 ? 220 : 260;
-    const pad = { l: W < 420 ? 40 : 48, r: 16, t: 16, b: 30 };
-    const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    const W = Math.max(chartWrap.clientWidth - 8, 260);
+    const narrow = W < 420;
+    const pad = { l: 8, r: narrow ? 52 : 62, t: 34, b: 26 };
+    const volH = 26, gap = 10;
+    const H = (narrow ? 250 : 300);
+    const ih = H - pad.t - pad.b - volH - gap, iw = W - pad.l - pad.r;
     const n = pts.length;
+    const baseY = pad.t + ih;
 
-    const vals = pts.map(p => p.value);
-    let lo, hi;
-    if (n < 3) { lo = 0; hi = Math.max(...vals) * 1.25 || 1; }
-    else {
-      const mn = Math.min(...vals), mx = Math.max(...vals);
-      const range = mx - mn || mx * 0.1 || 1;
-      lo = Math.max(0, mn - range * 0.2); hi = mx + range * 0.2;
-    }
-    const times = pts.map(p => Date.parse(p.date));
+    const vals = pts.map((p) => p.value);
+    const sc = niceScale(Math.max(...vals) * 1.05, 4);
+    const times = pts.map((p) => Date.parse(p.date));
     const t0 = times[0], t1 = times[n - 1];
-    const xOf = (i) => n === 1 ? pad.l + iw / 2 : pad.l + (times[i] - t0) / (t1 - t0) * iw;
-    const yOf = (v) => pad.t + ih - (v - lo) / (hi - lo) * ih;
+    const xOf = (i) => n === 1 || t1 === t0 ? pad.l + iw / 2 : pad.l + (times[i] - t0) / (t1 - t0) * iw;
+    const yOf = (v) => baseY - v / sc.top * ih;
 
     const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'График месячных визитов kogama.com' });
+    const gid = 'g' + (++gradSeq);
+    const defs = svgEl('defs', {});
+    const lg = svgEl('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 });
+    const s1 = svgEl('stop', { offset: '0%' }); s1.setAttribute('style', 'stop-color:var(--accent);stop-opacity:.38');
+    const s2 = svgEl('stop', { offset: '100%' }); s2.setAttribute('style', 'stop-color:var(--accent);stop-opacity:.03');
+    lg.append(s1, s2); defs.appendChild(lg); svg.appendChild(defs);
 
-    for (let k = 0; k <= 3; k++) {
-      const v = lo + (hi - lo) * k / 3, y = yOf(v);
-      svg.appendChild(svgEl('line', { class: 'grid', x1: pad.l, x2: W - pad.r, y1: y, y2: y }));
-      const tx = svgEl('text', { class: 'tick', x: pad.l - 6, y: y + 3, 'text-anchor': 'end' });
-      tx.textContent = fmtY(v, hi - lo < 4000);
+    // Горизонтальная сетка + подписи справа
+    const last = pts[n - 1], lastY = yOf(last.value);
+    for (let v = 0; v <= sc.top + 1e-9; v += sc.step) {
+      const y = yOf(v);
+      svg.appendChild(svgEl('line', { class: 'grid', x1: pad.l, x2: pad.l + iw, y1: y, y2: y }));
+      if (Math.abs(y - lastY) < 15) continue;
+      svg.appendChild(svgEl('rect', { class: 'ylab', x: pad.l + iw + 8, y: y - 10, width: pad.r - 10, height: 20, rx: 3 }));
+      const tx = svgEl('text', { class: 'tick', x: pad.l + iw + 8 + (pad.r - 10) / 2, y: y + 3.5, 'text-anchor': 'middle' });
+      tx.textContent = fmtY(v);
       svg.appendChild(tx);
     }
 
-    const xi = [...new Set(n === 1 ? [0] : [0, Math.round((n - 1) / 3), Math.round(2 * (n - 1) / 3), n - 1])];
-    xi.forEach((i) => {
-      const anchor = n === 1 ? 'middle' : i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle';
-      const tx = svgEl('text', { class: 'tick', x: xOf(i), y: H - 8, 'text-anchor': anchor });
-      tx.textContent = fmtShort(pts[i].date);
+    // Вертикальная сетка + подписи времени
+    timeMarks(t0, t1).forEach((m) => {
+      const x = pad.l + (m.t - t0) / (t1 - t0) * iw;
+      svg.appendChild(svgEl('line', { class: 'grid', x1: x, x2: x, y1: pad.t - 10, y2: baseY + gap + volH }));
+      const tx = svgEl('text', { class: 'tick', x, y: H - 6, 'text-anchor': 'middle' });
+      tx.textContent = m.label;
       svg.appendChild(tx);
     });
+    if (n === 1) {
+      const tx = svgEl('text', { class: 'tick', x: xOf(0), y: H - 6, 'text-anchor': 'middle' });
+      tx.textContent = fmtShort(pts[0].date);
+      svg.appendChild(tx);
+    }
 
+    // Мини-столбики изменения к прошлому замеру (зелёный — рост, красный — спад)
+    if (n >= 2) {
+      const diffs = pts.map((p, i) => i ? p.value - pts[i - 1].value : 0);
+      const md = Math.max(...diffs.map(Math.abs)) || 1;
+      const bw = Math.max(2, Math.min(10, iw / n * 0.6));
+      const vb = baseY + gap + volH;
+      diffs.forEach((d, i) => {
+        if (!i) return;
+        const h = Math.max(2, Math.abs(d) / md * volH);
+        svg.appendChild(svgEl('rect', { class: d >= 0 ? 'vol up' : 'vol down', x: xOf(i) - bw / 2, y: vb - h, width: bw, height: h, rx: 1 }));
+      });
+    }
+
+    // Линия + заливка
     if (n >= 2) {
       const d = pts.map((p, i) => `${i ? 'L' : 'M'}${xOf(i).toFixed(1)} ${yOf(p.value).toFixed(1)}`).join(' ');
-      if (n >= 3) svg.appendChild(svgEl('path', { class: 'area', d: `${d} L${xOf(n - 1).toFixed(1)} ${pad.t + ih} L${xOf(0).toFixed(1)} ${pad.t + ih} Z` }));
+      svg.appendChild(svgEl('path', { class: 'area', fill: `url(#${gid})`, d: `${d} L${xOf(n - 1).toFixed(1)} ${baseY} L${xOf(0).toFixed(1)} ${baseY} Z` }));
       svg.appendChild(svgEl('path', { class: 'line', d }));
     }
 
+    // Последнее значение: точка + плашка справа
+    svg.appendChild(svgEl('circle', { class: 'last-dot', cx: xOf(n - 1), cy: lastY, r: 4.5 }));
+    svg.appendChild(svgEl('rect', { class: 'last-pill', x: pad.l + iw + 4, y: lastY - 12, width: pad.r - 4, height: 24, rx: 3 }));
+    const lt = svgEl('text', { class: 'last-txt', x: pad.l + iw + 4 + (pad.r - 4) / 2, y: lastY + 4, 'text-anchor': 'middle' });
+    lt.textContent = fmtY(last.value);
+    svg.appendChild(lt);
+
+    // Курсор: вертикальная линия + точка + подсказка
+    const cross = svgEl('line', { class: 'cross', y1: pad.t - 10, y2: baseY + gap + volH, style: 'display:none' });
+    const cdot = svgEl('circle', { class: 'cdot', r: 5, style: 'display:none' });
+    svg.append(cross, cdot);
     const tip = el('div', 'tip');
-    const show = (g, p, x, y) => {
+    const hide = () => { tip.style.display = 'none'; cross.style.display = 'none'; cdot.style.display = 'none'; };
+    const showAt = (clientX) => {
+      const sr = svg.getBoundingClientRect(), wr = chartWrap.getBoundingClientRect();
+      const mx = (clientX - sr.left) * W / sr.width;
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < n; i++) { const dd = Math.abs(xOf(i) - mx); if (dd < bd) { bd = dd; bi = i; } }
+      const p = pts[bi], x = xOf(bi), y = yOf(p.value);
+      cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.style.display = '';
+      cdot.setAttribute('cx', x); cdot.setAttribute('cy', y); cdot.style.display = '';
       tip.textContent = '';
       tip.appendChild(document.createTextNode(fmtNum(p.value)));
       tip.appendChild(el('small', null, fmtLong(p.date)));
       tip.style.display = 'block';
-      const sr = svg.getBoundingClientRect(), wr = chartWrap.getBoundingClientRect();
       const px = x * sr.width / W + (sr.left - wr.left);
-      const py = y * sr.height / H + (sr.top - wr.top);
       const tw = tip.offsetWidth, th = tip.offsetHeight;
       tip.style.left = Math.min(Math.max(px - tw / 2, 4), wr.width - tw - 4) + 'px';
-      tip.style.top = Math.max(py - th - 12, 4) + 'px';
+      tip.style.top = '6px';
+      void th;
     };
-    const hide = () => { tip.style.display = 'none'; };
+    svg.addEventListener('pointermove', (e) => showAt(e.clientX));
+    svg.addEventListener('pointerdown', (e) => showAt(e.clientX));
+    svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
 
-    pts.forEach((p, i) => {
-      const x = xOf(i), y = yOf(p.value);
-      const g = svgEl('g', { class: 'pt', tabindex: '0', 'aria-label': `${fmtLong(p.date)}: ${fmtNum(p.value)} визитов` });
-      g.appendChild(svgEl('circle', { class: 'hit', cx: x, cy: y, r: 16 }));
-      g.appendChild(svgEl('circle', { class: 'dot', cx: x, cy: y, r: 4 }));
-      g.addEventListener('pointerenter', () => show(g, p, x, y));
-      g.addEventListener('pointerdown', () => show(g, p, x, y));
-      g.addEventListener('focus', () => show(g, p, x, y));
-      g.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
-      g.addEventListener('blur', hide);
-      svg.appendChild(g);
-    });
-
+    chartWrap.appendChild(el('div', 'chart-title', 'KOGAMA.COM · визитов в месяц'));
     chartWrap.appendChild(svg);
-    if (n === 1) chartWrap.appendChild(el('p', 'chart-note', 'Пока есть только один месячный замер. Линия динамики появится после следующего обновления HypeStat.'));
     chartWrap.appendChild(tip);
   }
 
   document.addEventListener('pointerdown', (e) => {
-    if (!e.target.closest || !e.target.closest('.pt')) {
+    if (!e.target.closest || !e.target.closest('.chart')) {
       const t = chartWrap.querySelector('.tip');
       if (t) t.style.display = 'none';
     }
@@ -240,13 +340,14 @@
 
   /* ---------- Старт ---------- */
   (async () => {
-    const [traffic, events, communities] = await Promise.all([
+    const [traffic, events, communities, meta] = await Promise.all([
       loadJSON('data/traffic.json', []),
       loadJSON('data/events.json', []),
-      loadJSON('data/communities.json', [])
+      loadJSON('data/communities.json', []),
+      loadMeta('data/meta.json')
     ]);
     trafficPts = cleanTraffic(traffic);
-    renderHero();
+    renderHero(meta);
     syncRange();
     drawChart();
     renderTimeline(events);

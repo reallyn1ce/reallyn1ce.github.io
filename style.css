@@ -51,36 +51,46 @@ body::before{
 }
 .hero-cap{margin-top:8px;color:var(--text2);font-size:16px}
 .src{font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-left:8px}
+.source-note{margin-top:5px;color:var(--text3);font-size:12px;line-height:1.5}
 .range{display:flex;gap:6px;margin-top:24px}
 .range[hidden]{display:none}
 .range button{
-  font-family:var(--font-mono);font-size:12px;color:var(--text2);background:transparent;
-  border:1px solid var(--border);border-radius:999px;padding:7px 14px;min-height:36px;cursor:pointer;
-  transition:background-color var(--dur),color var(--dur),border-color var(--dur);
+  flex:1;font-family:var(--font-mono);font-size:12px;font-weight:600;text-transform:uppercase;color:var(--text2);
+  background:var(--bg-card);border:none;border-radius:4px;padding:9px 4px;min-height:40px;cursor:pointer;
+  transition:background-color var(--dur),color var(--dur);
 }
-.range button:hover{border-color:var(--text3);color:var(--text)}
-.range button.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700}
+.range button:hover{color:var(--text)}
+.range button.active{background:var(--accent);color:#000}
 .chart{
-  position:relative;margin-top:12px;background:var(--bg-card);border:1px solid var(--border-soft);
-  border-radius:12px;padding:8px 4px 4px;transition:background-color var(--dur),border-color var(--dur);
+  position:relative;margin-top:8px;background:var(--bg-card);border:1px solid var(--border-soft);
+  border-radius:6px;padding:8px 4px 4px;touch-action:pan-y;transition:background-color var(--dur),border-color var(--dur);
 }
-.chart svg{display:block;width:100%;height:auto;overflow:visible}
-.chart .grid{stroke:var(--border-soft);stroke-width:1}
-.chart .tick{fill:var(--text3);font-family:var(--font-mono);font-size:10px}
+.chart-title{position:absolute;top:12px;left:14px;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.04em;z-index:1;pointer-events:none}
+.chart svg{display:block;width:100%;height:auto;overflow:visible;cursor:crosshair}
+.chart .grid{stroke:var(--text3);stroke-opacity:.22;stroke-width:1}
+.chart .tick{fill:var(--text2);font-family:var(--font-mono);font-size:10.5px}
+.chart .ylab{fill:var(--text3);fill-opacity:.14}
 .chart .line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
-.chart .area{fill:var(--accent-dim)}
-.chart .dot{fill:var(--accent);stroke:var(--bg-card);stroke-width:2;transition:r .15s}
-.chart .pt{cursor:pointer;outline:none}
-.chart .pt:hover .dot,.chart .pt:focus .dot{r:6;fill:var(--accent2)}
-.chart .hit{fill:transparent}
+.chart .vol.up{fill:#2fa37a}.chart .vol.down{fill:#c4453f}
+.chart .vol{opacity:.85}
+.chart .last-dot{fill:var(--accent);stroke:var(--bg-card);stroke-width:2}
+.chart .last-pill{fill:var(--bg);stroke:var(--border);stroke-width:1}
+.chart .last-txt{fill:var(--text);font-family:var(--font-mono);font-size:11px;font-weight:700}
+.chart .cross{stroke:var(--text2);stroke-opacity:.5;stroke-dasharray:3 3}
+.chart .cdot{fill:var(--accent);stroke:var(--bg-card);stroke-width:2}
 .tip{
   position:absolute;z-index:2;pointer-events:none;display:none;white-space:nowrap;
-  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;
-  font-family:var(--font-mono);font-size:12px;color:var(--text);
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 10px;
+  font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent);
 }
-.tip small{display:block;color:var(--text3);font-size:11px}
+.tip small{display:block;color:var(--text3);font-size:10.5px;font-weight:400}
 .chart-empty{padding:28px 12px;text-align:center;color:var(--text3);font-size:14px}
 .hero-meta{margin-top:12px;font-family:var(--font-mono);font-size:11px;color:var(--text3)}
+.data-status{margin-top:6px;font-size:12px;line-height:1.5;color:var(--text3)}
+.data-status::before{content:"";display:inline-block;width:7px;height:7px;margin:0 7px 1px 0;border-radius:50%;background:currentColor}
+.data-status.is-fresh{color:#2fa37a}
+.data-status.is-stale{color:#e09b35}
+.data-status.is-unknown{color:var(--text3)}
 
 /* Sections */
 .section{padding:24px 0}

@@ -1,9 +1,11 @@
-const CACHE_NAME = 'archive-v5';
+const CACHE_NAME = 'archive-v8';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './data/traffic.json',
+  './data/meta.json',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png'

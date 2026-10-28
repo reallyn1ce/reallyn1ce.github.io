@@ -29,13 +29,17 @@
     <p class="hero-label">Посещаемость kogama.com</p>
     <div class="hero-num" id="heroNum" aria-live="polite">—</div>
     <p class="hero-cap">визитов в месяц <span class="src">HypeStat</span></p>
+    <p class="source-note">Оценка стороннего сервиса HypeStat, не официальная статистика KoGaMa.</p>
     <div class="range" id="range" role="group" aria-label="Период" hidden>
       <button type="button" data-range="30">30 дней</button>
+      <button type="button" data-range="182">6 мес.</button>
       <button type="button" data-range="365">Год</button>
-      <button type="button" data-range="all">Всё</button>
+      <button type="button" data-range="all">Всё время</button>
     </div>
     <div class="chart" id="chart"></div>
     <p class="hero-meta" id="heroMeta"></p>
+    <p class="data-status" id="dataStatus" role="status" aria-live="polite">Статус проверки загружается…</p>
+    <p class="chart-note">Точки появляются при обновлении оценки HypeStat, а не обязательно каждый день.</p>
   </section>
 
   <section class="section" aria-labelledby="tl-title">
