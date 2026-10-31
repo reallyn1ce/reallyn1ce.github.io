@@ -5,7 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KOGAMA ARCHIVE</title>
 <meta name="description" content="Памятка о KoGaMa: посещаемость, хронология, сообщества.">
+<meta property="og:title" content="KOGAMA ARCHIVE">
+<meta property="og:description" content="Памятка о KoGaMa: посещаемость, хронология, сообщества.">
+<meta property="og:type" content="website">
+<!-- Картинку положи в img/og-preview.png. Для превью в соцсетях позже замени на абсолютный URL сайта. -->
+<meta property="og:image" content="./img/og-preview.png">
 <meta name="theme-color" content="#0c0d12">
+<meta name="archive-build" content="2b75f698daf6">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,45 +22,129 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./style.css?v=2b75f698daf6">
+<noscript><style>.sk,.sk-chart{display:none}.hero.is-loading .hero-num{background:none;color:var(--accent)}</style></noscript>
 </head>
 <body>
 <header class="header">
   <a class="logo" href="./">KOGAMA ARCHIVE</a>
   <button class="icon-btn" id="themeToggle" type="button" aria-label="Сменить тему"></button>
+<nav class="nav" id="nav" aria-label="Разделы архива">
+  <a href="#stats">Статистика</a>
+  <a href="#history">История</a>
+  <a href="#analytics">Аналитика</a>
+  <a href="#sources">Источники</a>
+  <a href="#changelog">Журнал</a>
+</nav>
 </header>
 
 <main class="page">
-  <section class="hero" aria-labelledby="heroNum">
+<div class="view" id="view-stats">
+  <section class="hero is-loading" aria-labelledby="heroNum" aria-busy="true">
     <p class="hero-label">Посещаемость kogama.com</p>
     <div class="hero-num" id="heroNum" aria-live="polite">—</div>
     <p class="hero-cap">визитов в месяц <span class="src">HypeStat</span></p>
     <p class="source-note">Оценка стороннего сервиса HypeStat, не официальная статистика KoGaMa.</p>
+    <dl class="stats" id="stats" aria-label="Ключевые показатели">
+      <div class="stat" id="stat-current">
+        <dt class="stat-lbl">Текущая</dt>
+        <dd class="stat-val"><span class="sk sk-val" aria-hidden="true"></span></dd>
+        <dd class="stat-sub"><span class="sk sk-sub" aria-hidden="true"></span></dd>
+      </div>
+      <div class="stat" id="stat-change">
+        <dt class="stat-lbl">Изменение</dt>
+        <dd class="stat-val"><span class="sk sk-val" aria-hidden="true"></span></dd>
+        <dd class="stat-sub"><span class="sk sk-sub" aria-hidden="true"></span></dd>
+      </div>
+      <div class="stat" id="stat-max">
+        <dt class="stat-lbl">Максимум</dt>
+        <dd class="stat-val"><span class="sk sk-val" aria-hidden="true"></span></dd>
+        <dd class="stat-sub"><span class="sk sk-sub" aria-hidden="true"></span></dd>
+      </div>
+      <div class="stat" id="stat-updated">
+        <dt class="stat-lbl">Обновлено</dt>
+        <dd class="stat-val"><span class="sk sk-val" aria-hidden="true"></span></dd>
+        <dd class="stat-sub"><span class="sk sk-sub" aria-hidden="true"></span></dd>
+      </div>
+    </dl>
     <div class="range" id="range" role="group" aria-label="Период" hidden>
       <button type="button" data-range="30">30 дней</button>
       <button type="button" data-range="182">6 мес.</button>
       <button type="button" data-range="365">Год</button>
       <button type="button" data-range="all">Всё время</button>
     </div>
-    <div class="chart" id="chart"></div>
+    <div class="chart" id="chart"><div class="sk-chart sk" aria-hidden="true"></div></div>
+    <noscript><p class="chart-note">График и данные требуют JavaScript. Исходные данные: <a href="data/traffic.json">traffic.json</a></p></noscript>
     <p class="hero-meta" id="heroMeta"></p>
     <p class="data-status" id="dataStatus" role="status" aria-live="polite">Статус проверки загружается…</p>
     <p class="chart-note">Точки появляются при обновлении оценки HypeStat, а не обязательно каждый день.</p>
   </section>
 
+</div>
+
+<div class="view" id="view-history" hidden>
   <section class="section" aria-labelledby="tl-title">
-    <h2 id="tl-title">Хронология</h2>
+    <h2 id="tl-title">История KoGaMa</h2>
+    <p class="lead">События собраны только из проверяемых источников. Если точная дата неизвестна, указан год или приблизительный период, а статус показывает, насколько сведениям можно доверять.</p>
     <ol class="timeline" id="timeline"></ol>
+    <ul class="legend" id="tlLegend" aria-label="Статусы достоверности событий" hidden>
+      <li><span class="lg-dot st-confirmed" aria-hidden="true"></span>Подтверждено</li>
+      <li><span class="lg-dot st-indirect" aria-hidden="true"></span>Косвенное подтверждение</li>
+      <li><span class="lg-dot st-unverified" aria-hidden="true"></span>Не подтверждено</li>
+    </ul>
+  </section>
+</div>
+
+<div class="view" id="view-analytics" hidden>
+  <section class="section" aria-labelledby="an-title">
+    <h2 id="an-title">Аналитика</h2>
+    <p class="lead">Расчёты строятся только на сохранённых замерах. Это интерпретация данных, а не официальная статистика и не прогноз.</p>
+    <div id="analyticsBody"></div>
+  </section>
+</div>
+
+<div class="view" id="view-sources" hidden>
+  <section class="section" aria-labelledby="src-title">
+    <h2 id="src-title">Источники и достоверность</h2>
+    <p class="callout">Данные HypeStat являются оценкой стороннего сервиса и не представляют собой официальную статистику KoGaMa.</p>
+    <div class="cats" id="sourceCats">
+      <article class="cat cat-official"><h3>Официально подтверждённые сведения</h3><p>Заявления самой KoGaMa и корпоративная отчётность владельцев платформы (например, объявление на kogama.com, отчёты Adventure Box Technology AB). Помечаются на хронологии статусом «Подтверждено».</p></article>
+      <article class="cat cat-third"><h3>Данные сторонних аналитических сервисов</h3><p>Ежемесячные оценки посещаемости берутся у HypeStat. Это модельная оценка сервиса, а не данные счётчиков KoGaMa; точность не гарантируется. Замер в архиве — это значение, которое HypeStat показывал на дату замера.</p></article>
+      <article class="cat cat-archive"><h3>Архивные материалы</h3><p>Снимки страниц в Wayback Machine (Internet Archive). Для таких точек на графике указан источник «Wayback» и ссылка на сам снимок; дата точки соответствует дате снимка, если она известна.</p></article>
+      <article class="cat cat-approx"><h3>Приблизительные исторические оценки</h3><p>Сведения вида «около», пересказы и заметки сообщества без документального подтверждения. На хронологии такие события имеют статус «Не подтверждено». Числовых приблизительных оценок в архиве сейчас нет; если появятся, будут помечены отдельно.</p></article>
+      <article class="cat cat-interp"><h3>Предположения и аналитические интерпретации</h3><p>Выводы раздела «Аналитика»: проценты, средние, периоды роста и снижения. Это вычисления по имеющимся замерам; причины изменений они не объясняют.</p></article>
+    </div>
+    <h3 class="sub">Данные в архиве</h3>
+    <div id="dataInventory"></div>
+  </section>
+
+  <section class="section" aria-labelledby="docs-title">
+    <h2 id="docs-title">Документы и материалы</h2>
+    <div class="cards" id="documents"></div>
   </section>
 
   <section class="section" aria-labelledby="cm-title">
     <h2 id="cm-title">KoGaMa-сообщества</h2>
     <div class="cards" id="communities"></div>
   </section>
+</div>
+
+<div class="view" id="view-changelog" hidden>
+  <section class="section" aria-labelledby="cl-title">
+    <h2 id="cl-title">Журнал изменений</h2>
+    <dl class="kv" id="clStatus"></dl>
+    <p class="lead">Это три разных события: обновление самого сайта, проверка источника статистики и фактическое изменение значений. Успешная проверка не означает, что статистика изменилась.</p>
+    <div id="clList"></div>
+  </section>
+</div>
 </main>
 
-<footer class="footer">Неофициальная памятка. Проект не связан с Multiverse ApS.</footer>
+<footer class="footer">
+  <p>Неофициальный независимый проект. Не связан с разработчиками и владельцами KoGaMa.</p>
+  <p class="footer-links"><a href="data/traffic.json">Исходные данные (JSON)</a><a id="ghLink" href="#" target="_blank" rel="noopener noreferrer" hidden>GitHub</a></p>
+</footer>
 
-<script src="./app.js"></script>
+<script src="./analytics.js?v=2b75f698daf6"></script>
+<script src="./app.js?v=2b75f698daf6"></script>
 </body>
 </html>

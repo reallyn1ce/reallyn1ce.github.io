@@ -61,6 +61,29 @@
   const fmtShort = (iso) => new Date(iso + 'T00:00:00Z')
     .toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' });
 
+  // Должно совпадать с META_COMMIT_INTERVAL_DAYS в scripts/fetch-traffic.js
+  const META_COMMIT_INTERVAL_DAYS = 7;
+  const STALE_AFTER_DAYS = META_COMMIT_INTERVAL_DAYS + 3;
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  const safeUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
+
+  function plural(n, f) {
+    const m10 = n % 10, m100 = n % 100;
+    return m10 === 1 && m100 !== 11 ? f[0] : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? f[1] : f[2];
+  }
+  // Целые дни от даты (UTC) до сегодняшней UTC-даты — так же, как пишет дату скрипт сбора
+  function daysSince(iso) {
+    const today = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+    return Math.floor((today - Date.parse(iso + 'T00:00:00Z')) / 864e5);
+  }
+  function fmtAgo(iso) {
+    const d = daysSince(iso);
+    if (d <= 0) return 'сегодня';
+    if (d === 1) return 'вчера';
+    if (d > 30) return 'более месяца назад';
+    return `${d} ${plural(d, ['день', 'дня', 'дней'])} назад`;
+  }
+
   function cleanTraffic(raw) {
     const byDate = new Map();
     for (const p of raw) {
@@ -119,22 +142,66 @@
       heroMeta.textContent = `Последний сохранённый замер: ${fmtLong(last.date)} · источник: ${last.source}`;
     }
 
-    const checked = typeof meta.lastChecked === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(meta.lastChecked)
-      ? meta.lastChecked : null;
+    const checked = typeof meta.lastChecked === 'string' && ISO.test(meta.lastChecked) ? meta.lastChecked : null;
     if (!checked) {
       status.className = 'data-status is-unknown';
       status.textContent = 'Статус проверки источника пока недоступен.';
       return;
     }
 
-    const ageDays = Math.floor((Date.now() - Date.parse(checked + 'T00:00:00Z')) / 864e5);
-    if (ageDays <= 3) {
+    // lastChecked пишется в файл раз в неделю, поэтому показываем возраст именно этой даты, а не «сегодня»
+    const ago = fmtAgo(checked);
+    if (daysSince(checked) <= STALE_AFTER_DAYS) {
       status.className = 'data-status is-fresh';
-      status.textContent = `Источник проверен успешно: ${fmtLong(checked)}.`;
+      status.textContent = `Источник проверен ${ago} (${fmtLong(checked)}). Дата в архиве обновляется раз в неделю, реальная проверка могла быть позже.`;
     } else {
       status.className = 'data-status is-stale';
-      status.textContent = `Последняя успешная проверка: ${fmtLong(checked)}. Данные могут быть устаревшими — проверьте GitHub Actions.`;
+      status.textContent = `Последняя зафиксированная проверка: ${ago} (${fmtLong(checked)}). Данные могут быть устаревшими.`;
     }
+  }
+
+  /* ---------- Карточки статистики ---------- */
+  function setStat(id, val, sub, mod) {
+    const box = document.getElementById('stat-' + id);
+    if (!box) return;
+    const v = box.querySelector('.stat-val'), s = box.querySelector('.stat-sub');
+    v.className = 'stat-val' + (mod ? ' ' + mod : '');
+    v.textContent = val;
+    s.textContent = sub;
+  }
+
+  function renderStats(meta = {}) {
+    const n = trafficPts.length;
+    const last = trafficPts[n - 1], prev = trafficPts[n - 2];
+
+    setStat('current', last ? fmtNum(last.value) : '—', 'визитов/мес');
+
+    if (last && prev && prev.value > 0) {
+      const pct = (last.value - prev.value) / prev.value * 100;
+      const txt = Math.abs(pct).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      const flat = Math.abs(pct) < 0.05;
+      setStat('change', flat ? '0,0%' : `${pct > 0 ? '↑' : '↓'} ${txt}%`, `к замеру ${fmtShort(prev.date)}`, flat ? '' : pct > 0 ? 'up' : 'down');
+    } else {
+      setStat('change', '—', 'мало замеров');
+    }
+
+    if (n) {
+      const top = trafficPts.reduce((m, p) => (p.value > m.value ? p : m));
+      setStat('max', fmtNum(top.value), 'за период сбора');
+      const t = document.getElementById('stat-max');
+      if (t) t.title = `Замер от ${fmtLong(top.date)}`;
+    } else {
+      setStat('max', '—', 'за период сбора');
+    }
+
+    const checked = typeof meta.lastChecked === 'string' && ISO.test(meta.lastChecked) ? meta.lastChecked : null;
+    setStat('updated', checked ? fmtAgo(checked) : '—', 'проверка источника', checked ? 'is-text' : '');
+  }
+
+  function finishLoading() {
+    const hero = document.querySelector('.hero');
+    hero.classList.remove('is-loading');
+    hero.removeAttribute('aria-busy');
   }
 
   const fmtY = (v) => v >= 1e6 ? +(v / 1e6).toFixed(2) + 'M'
@@ -173,6 +240,8 @@
     }
     return out;
   }
+
+  const isWayback = (p) => /wayback/i.test(p.source || '');
 
   let gradSeq = 0;
   function drawChart() {
@@ -252,8 +321,17 @@
       svg.appendChild(svgEl('path', { class: 'line', d }));
     }
 
+    // Разные источники: живые точки — залитые, снимки Wayback — полые с пунктиром.
+    // Если источник один, маркеров нет (вид графика не меняется).
+    const mixed = pts.some(isWayback) && pts.some((p) => !isWayback(p));
+    if (mixed) {
+      pts.forEach((p, i) => svg.appendChild(svgEl('circle', {
+        class: isWayback(p) ? 'pt-wb' : 'pt-live', cx: xOf(i), cy: yOf(p.value), r: 3.5
+      })));
+    }
+
     // Последнее значение: точка + плашка справа
-    svg.appendChild(svgEl('circle', { class: 'last-dot', cx: xOf(n - 1), cy: lastY, r: 4.5 }));
+    svg.appendChild(svgEl('circle', { class: 'last-dot' + (mixed && isWayback(last) ? ' pt-wb' : ''), cx: xOf(n - 1), cy: lastY, r: 4.5 }));
     svg.appendChild(svgEl('rect', { class: 'last-pill', x: pad.l + iw + 4, y: lastY - 12, width: pad.r - 4, height: 24, rx: 3 }));
     const lt = svgEl('text', { class: 'last-txt', x: pad.l + iw + 4 + (pad.r - 4) / 2, y: lastY + 4, 'text-anchor': 'middle' });
     lt.textContent = fmtY(last.value);
@@ -273,9 +351,18 @@
       const p = pts[bi], x = xOf(bi), y = yOf(p.value);
       cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.style.display = '';
       cdot.setAttribute('cx', x); cdot.setAttribute('cy', y); cdot.style.display = '';
+      cdot.setAttribute('class', 'cdot' + (mixed && isWayback(p) ? ' wb' : ''));
       tip.textContent = '';
       tip.appendChild(document.createTextNode(fmtNum(p.value)));
       tip.appendChild(el('small', null, fmtLong(p.date)));
+      tip.appendChild(el('small', null, p.source));
+      const href = safeUrl(p.archiveUrl);
+      if (href) {
+        const a = el('a', null, 'снимок Wayback ↗');
+        a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        tip.appendChild(a);
+      }
+      tip.classList.toggle('has-link', !!href);
       tip.style.display = 'block';
       const px = x * sr.width / W + (sr.left - wr.left);
       const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -285,11 +372,24 @@
     };
     svg.addEventListener('pointermove', (e) => showAt(e.clientX));
     svg.addEventListener('pointerdown', (e) => showAt(e.clientX));
-    svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
+    // Мышь может перейти с графика на подсказку со ссылкой — тогда не прячем её
+    svg.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse' && !(e.relatedTarget && tip.contains(e.relatedTarget))) hide();
+    });
+    tip.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse' && !(e.relatedTarget && svg.contains(e.relatedTarget))) hide();
+    });
 
     chartWrap.appendChild(el('div', 'chart-title', 'KOGAMA.COM · визитов в месяц'));
     chartWrap.appendChild(svg);
     chartWrap.appendChild(tip);
+    if (mixed) {
+      const lg = el('div', 'pt-legend');
+      const a = el('span'); a.append(el('i'), document.createTextNode('замер HypeStat'));
+      const b = el('span'); b.append(el('i', 'wb'), document.createTextNode('снимок из Wayback Machine'));
+      lg.append(a, b);
+      chartWrap.appendChild(lg);
+    }
   }
 
   document.addEventListener('pointerdown', (e) => {
@@ -302,19 +402,90 @@
   window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(drawChart, 120); });
 
   /* ---------- Хронология ---------- */
+  const STATUS_LABEL = {
+    confirmed: 'Подтверждено',
+    indirect: 'Косвенное подтверждение',
+    unverified: 'Не подтверждено'
+  };
+  const CATEGORY_LABEL = {
+    start: 'Начало', company: 'Компания', platform: 'Платформа', popularity: 'Популярность',
+    features: 'Функции', announcement: 'Объявление', archive: 'Архив', other: 'Другое'
+  };
+  const evKey = (e) => String(e.date || e.year || '');
+
   function renderTimeline(events) {
     const ol = $('#timeline');
     ol.textContent = '';
-    events
-      .filter(e => e && e.label)
-      .sort((a, b) => (Number(a.year) || 0) - (Number(b.year) || 0))
-      .forEach((e) => {
-        const li = el('li');
-        li.appendChild(el('div', 'tl-year', String(e.year ?? '')));
-        li.appendChild(el('div', 'tl-label', e.label));
-        if (e.note) li.appendChild(el('p', 'tl-note', e.note));
-        ol.appendChild(li);
+    const list = events.filter((e) => e && e.label).slice();
+    // Начало сбора данных берём из самих данных, а не из памяти
+    if (trafficPts.length && !list.some((e) => e.category === 'archive')) {
+      const f = trafficPts[0];
+      list.push({
+        year: Number(f.date.slice(0, 4)), date: f.date, category: 'archive', status: 'confirmed',
+        label: 'Первый замер посещаемости в архиве',
+        note: `Значение ${fmtNum(f.value)} визитов в месяц, источник: ${f.source}. С этой даты ведётся непрерывная история замеров архива.`
       });
+    }
+    list.sort((a, b) => evKey(a).localeCompare(evKey(b)) || (Number(a.year) || 0) - (Number(b.year) || 0));
+    list.forEach((e) => {
+      const st = Object.prototype.hasOwnProperty.call(STATUS_LABEL, e.status) ? e.status : 'unverified';
+      const li = el('li', 'st-' + st);
+      const dot = el('span', 'tl-dot st-' + st);
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', 'Статус: ' + STATUS_LABEL[st]);
+      dot.title = STATUS_LABEL[st];
+      li.appendChild(dot);
+      const when = ISO.test(e.date || '') ? fmtLong(e.date) : String(e.date || e.year || '');
+      li.appendChild(el('div', 'tl-date', when));
+      li.appendChild(el('div', 'tl-label', e.label));
+      if (e.note) li.appendChild(el('p', 'tl-note', e.note));
+      const tags = el('div', 'tl-tags');
+      tags.appendChild(el('span', 'tag st-' + st, STATUS_LABEL[st]));
+      if (CATEGORY_LABEL[e.category]) tags.appendChild(el('span', 'tag', CATEGORY_LABEL[e.category]));
+      li.appendChild(tags);
+      const srcs = Array.isArray(e.sources) ? e.sources.filter((x) => x && x.title && safeUrl(x.url)) : [];
+      if (srcs.length) {
+        const ul = el('ul', 'tl-src');
+        srcs.forEach((x) => {
+          const l = el('li'); const a = el('a', null, x.title + ' ↗');
+          a.href = x.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+          l.appendChild(a); ul.appendChild(l);
+        });
+        li.appendChild(ul);
+      } else {
+        li.appendChild(el('p', 'tl-note muted', 'Источник не указан.'));
+      }
+      ol.appendChild(li);
+    });
+    $('#tlLegend').hidden = !list.length;
+  }
+
+  /* ---------- Документы ---------- */
+  function renderDocuments(list) {
+    const box = $('#documents');
+    box.textContent = '';
+    const items = list.filter(d => d && d.title && safeUrl(d.url));
+    if (!items.length) {
+      box.appendChild(el('div', 'placeholder', 'Раздел наполняется: снимки, объявления, архивы'));
+      return;
+    }
+    items.forEach((d) => {
+      const a = el('a', 'card');
+      a.href = d.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      const head = el('div', 'card-head');
+      const ico = el('span', 'card-ico', '📄');
+      ico.setAttribute('aria-hidden', 'true');
+      head.append(ico, el('div', 'card-name', d.title));
+      a.appendChild(head);
+      if (d.desc) a.appendChild(el('p', 'card-desc', d.desc));
+      if (d.source || d.date) {
+        const meta = el('div', 'card-meta');
+        if (d.source) meta.appendChild(el('span', 'badge', d.source));
+        if (d.date) meta.appendChild(el('span', null, ISO.test(d.date) ? fmtLong(d.date) : String(d.date)));
+        a.appendChild(meta);
+      }
+      box.appendChild(a);
+    });
   }
 
   /* ---------- Сообщества ---------- */
@@ -338,23 +509,311 @@
     });
   }
 
+  /* ---------- Аналитика ---------- */
+  const A = window.KAnalytics;
+  const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  const monthName = (k) => `${MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`;
+  const periodLabel = (k) => (k.length === 4 ? `${k} год` : monthName(k));
+  const fmtPct = (p) => (p == null ? '—' : (Math.abs(p) < 0.05 ? '0,0%' : `${p > 0 ? '+' : '−'}${Math.abs(p).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`));
+  const pctCls = (p) => (p == null || Math.abs(p) < 0.05 ? '' : p > 0 ? 'up' : 'down');
+
+  function table(heads, rows) {
+    const wrap = el('div', 'tbl-wrap'), t = el('table', 'tbl');
+    const thead = el('thead'), tr = el('tr');
+    heads.forEach((h) => tr.appendChild(el('th', null, h)));
+    thead.appendChild(tr); t.appendChild(thead);
+    const tb = el('tbody');
+    rows.forEach((r) => {
+      const row = el('tr');
+      r.forEach((c) => {
+        const td = el('td', c && c.cls ? c.cls : null, c && typeof c === 'object' ? c.text : c);
+        row.appendChild(td);
+      });
+      tb.appendChild(row);
+    });
+    t.appendChild(tb); wrap.appendChild(t);
+    return wrap;
+  }
+  const block = (title) => { const b = el('div', 'an-block'); b.appendChild(el('h3', null, title)); return b; };
+  const kpi = (v, l) => { const k = el('div', 'kpi'); k.append(el('b', null, v), el('span', null, l)); return k; };
+
+  let cmpA = null, cmpB = null;
+
+  function renderAnalytics() {
+    const root = $('#analyticsBody');
+    root.textContent = '';
+    const pts = trafficPts;
+    if (!A || !pts.length) {
+      root.appendChild(el('div', 'notice', 'Данных пока нет — аналитика появится после первого замера.'));
+      return;
+    }
+    const o = A.overall(pts);
+
+    // Сводка
+    const sum = block('Сводка по сохранённым замерам');
+    const k = el('div', 'kpis');
+    k.append(
+      kpi(String(o.count), 'замеров в архиве'),
+      kpi(`${fmtShort(o.first.date)} – ${fmtShort(o.last.date)}`, 'период наблюдений'),
+      kpi(fmtNum(o.avg), 'среднее по замерам'),
+      kpi(fmtNum(o.max.value), `максимум · ${fmtShort(o.max.date)}`),
+      kpi(fmtNum(o.min.value), `минимум · ${fmtShort(o.min.date)}`)
+    );
+    sum.appendChild(k);
+    sum.appendChild(el('p', 'chart-note', 'Максимум и минимум — среди реально собранных замеров, а не за всю историю KoGaMa.'));
+    if (o.mixedSources) sum.appendChild(el('p', 'chart-note', 'В данных смешаны замеры HypeStat и архивные снимки; значения разных источников могут быть несопоставимы.'));
+    root.appendChild(sum);
+
+    if (pts.length < 2) {
+      root.appendChild(el('div', 'notice', 'Недостаточно данных для анализа динамики: в архиве всего один замер. Сравнение периодов, процентные изменения и периоды роста или снижения станут доступны, когда накопится минимум два замера из разных месяцев. Мы не достраиваем недостающие значения.'));
+      return;
+    }
+
+    const total = el('p', 'chart-note');
+    total.textContent = `Изменение от первого замера к последнему: ${fmtPct(o.pct)} за ${o.spanDays} дн.`;
+    sum.appendChild(total);
+
+    // Сравнение двух периодов
+    const opts = A.periodOptions(pts);
+    const keys = [...opts.years, ...opts.months];
+    const cb = block('Сравнение двух периодов');
+    if (keys.length < 2) {
+      cb.appendChild(el('div', 'notice', 'Для сравнения нужны как минимум два разных периода (года или месяца) с замерами.'));
+    } else {
+      if (!keys.includes(cmpA) || !keys.includes(cmpB)) {
+        cmpB = opts.months[opts.months.length - 1]; cmpA = opts.months[opts.months.length - 2] || keys[0];
+      }
+      const sel = el('div', 'cmp');
+      const mk = (id, label, val, onChange) => {
+        const w = el('div'); const l = el('label', null, label); l.htmlFor = id;
+        const s = el('select'); s.id = id;
+        keys.forEach((kk) => {
+          const n = pts.filter((p) => p.date.startsWith(kk)).length;
+          const op = el('option', null, `${periodLabel(kk)} · ${n} ${plural(n, ['замер', 'замера', 'замеров'])}`);
+          op.value = kk; if (kk === val) op.selected = true; s.appendChild(op);
+        });
+        s.addEventListener('change', () => onChange(s.value));
+        w.append(l, s); return w;
+      };
+      sel.append(mk('cmpA', 'Период A (база)', cmpA, (v) => { cmpA = v; renderAnalytics(); }), mk('cmpB', 'Период B', cmpB, (v) => { cmpB = v; renderAnalytics(); }));
+      cb.appendChild(sel);
+      const r = A.comparePeriods(pts, cmpA, cmpB);
+      if (!r) {
+        cb.appendChild(el('div', 'notice', 'Выберите два разных периода.'));
+      } else {
+        cb.appendChild(table(['', 'Среднее', 'Замеров', 'Мин.', 'Макс.'], [
+          [periodLabel(r.a.key), fmtNum(r.a.avg), r.a.count, fmtNum(r.a.min.value), fmtNum(r.a.max.value)],
+          [periodLabel(r.b.key), fmtNum(r.b.avg), r.b.count, fmtNum(r.b.min.value), fmtNum(r.b.max.value)]
+        ]));
+        const res = el('div', 'li');
+        res.appendChild(document.createTextNode(`Среднее изменилось на `));
+        res.appendChild(el('b', pctCls(r.pct), fmtPct(r.pct)));
+        res.appendChild(document.createTextNode(` (${r.diff >= 0 ? '+' : '−'}${fmtNum(Math.abs(r.diff))} визитов/мес).`));
+        const notes = ['Среднее считается по имеющимся замерам, а не по всем дням периода.'];
+        [r.a, r.b].forEach((x) => { if (x.key.length === 4 && x.count < 12) notes.push(`За ${x.key} год есть замеров: ${x.count} из 12 — среднее может не отражать год целиком.`); });
+        if (r.mixedSources) notes.push('Периоды содержат данные разных источников — сравнение приблизительное.');
+        res.appendChild(el('small', null, notes.join(' ')));
+        cb.appendChild(res);
+      }
+    }
+    root.appendChild(cb);
+
+    // По годам
+    const yb = block('Динамика по годам');
+    const yrs = A.byYear(pts);
+    yb.appendChild(table(['Год', 'Замеров', 'Среднее', 'Мин.', 'Макс.', 'К пред. году'], yrs.map((y) => [
+      y.year, `${y.months}/12`, fmtNum(y.avg), fmtNum(y.min.value), fmtNum(y.max.value), { text: fmtPct(y.yoy), cls: pctCls(y.yoy) }
+    ])));
+    yb.appendChild(el('p', 'chart-note', yrs.length < 2 ? 'Сравнение с предыдущим годом появится, когда в архиве будут данные минимум за два соседних года.' : 'Сравнение показано только для соседних лет, у которых есть данные.'));
+    root.appendChild(yb);
+
+    // По месяцам
+    const mb = block('Значения по месяцам');
+    const ch = A.changes(pts);
+    const rows = pts.map((p, i) => {
+      const c = i ? ch[i - 1] : null;
+      return [monthName(p.date), fmtNum(p.value), c ? { text: fmtPct(c.pct), cls: pctCls(c.pct) } : '—', c ? `${c.days} дн.` : '—'];
+    }).reverse();
+    mb.appendChild(table(['Месяц', 'Визитов', 'Изменение', 'Интервал'], rows.slice(0, 12)));
+    if (rows.length > 12) {
+      const d = el('details', 'more'); d.appendChild(el('summary', null, `Показать ещё ${rows.length - 12}`));
+      d.appendChild(table(['Месяц', 'Визитов', 'Изменение', 'Интервал'], rows.slice(12)));
+      mb.appendChild(d);
+    }
+    mb.appendChild(el('p', 'chart-note', 'Интервал — число дней между соседними замерами; если он заметно больше месяца, в данных есть пропуски.'));
+    root.appendChild(mb);
+
+    // Заметные изменения
+    const nb = block('Наиболее заметные изменения');
+    const top = A.topChanges(pts, 3);
+    const li = (c) => {
+      const d = el('div', 'li');
+      d.appendChild(el('b', pctCls(c.pct), fmtPct(c.pct)));
+      d.appendChild(document.createTextNode(` ${fmtNum(c.from.value)} → ${fmtNum(c.to.value)}`));
+      d.appendChild(el('small', null, `${fmtShort(c.from.date)} → ${fmtShort(c.to.date)} (${c.days} дн.)`));
+      return d;
+    };
+    if (!top.up.length && !top.down.length) nb.appendChild(el('div', 'notice', 'Значения между замерами не менялись.'));
+    if (top.up.length) { nb.appendChild(el('p', 'chart-note', 'Рост')); top.up.forEach((c) => nb.appendChild(li(c))); }
+    if (top.down.length) { nb.appendChild(el('p', 'chart-note', 'Снижение')); top.down.forEach((c) => nb.appendChild(li(c))); }
+    root.appendChild(nb);
+
+    // Устойчивая динамика
+    const sb = block('Периоды устойчивого роста и снижения');
+    const st = A.streaks(pts, 3);
+    if (pts.length < 4) sb.appendChild(el('div', 'notice', 'Недостаточно данных: для вывода нужно минимум 4 замера (три изменения подряд в одну сторону).'));
+    else if (!st.length) sb.appendChild(el('div', 'notice', 'Периодов, где значение росло или снижалось три замера подряд, в имеющихся данных нет.'));
+    else st.forEach((s) => {
+      const d = el('div', 'li');
+      d.appendChild(el('b', s.dir, `${s.dir === 'up' ? 'Рост' : 'Снижение'} ${s.changes} замера подряд · ${fmtPct(s.pct)}`));
+      d.appendChild(el('small', null, `${fmtShort(s.from.date)} → ${fmtShort(s.to.date)}: ${fmtNum(s.from.value)} → ${fmtNum(s.to.value)}`));
+      sb.appendChild(d);
+    });
+    root.appendChild(sb);
+  }
+
+  /* ---------- Источники: что реально есть в данных ---------- */
+  function renderInventory() {
+    const box = $('#dataInventory');
+    box.textContent = '';
+    if (!trafficPts.length) { box.appendChild(el('div', 'placeholder', 'Замеров пока нет')); return; }
+    const g = new Map();
+    trafficPts.forEach((p) => {
+      const k = p.source || 'HypeStat';
+      const x = g.get(k) || { n: 0, from: p.date, to: p.date };
+      x.n++; x.to = p.date; g.set(k, x);
+    });
+    const rows = [...g.entries()].map(([name, x]) => [name, x.n, fmtShort(x.from), fmtShort(x.to)]);
+    box.appendChild(table(['Источник', 'Замеров', 'Первый', 'Последний'], rows));
+    const wb = trafficPts.filter((p) => safeUrl(p.archiveUrl));
+    if (wb.length) {
+      box.appendChild(el('p', 'chart-note', 'Снимки Wayback Machine:'));
+      wb.forEach((p) => {
+        const d = el('div', 'li'); const a = el('a', null, `снимок на ${fmtLong(p.date)} ↗`);
+        a.href = p.archiveUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        d.append(a, el('small', null, `Значение: ${fmtNum(p.value)}`)); box.appendChild(d);
+      });
+    }
+  }
+
+  /* ---------- Журнал изменений ---------- */
+  function renderChangelog(log, meta, ver) {
+    const latest = log.find((e) => e && e.version) || null;
+    const ok = (d) => typeof d === 'string' && ISO.test(d);
+    const dl = $('#clStatus'); dl.textContent = '';
+    const add = (label, value, hint) => {
+      const w = el('div'); w.append(el('dt', null, label), el('dd', null, value));
+      if (hint) w.appendChild(el('dd', 'sm', hint));
+      dl.appendChild(w);
+    };
+    add('Версия сайта', latest ? latest.version : '—');
+    add('Сайт обновлён', latest && ok(latest.date) ? fmtLong(latest.date) : '—', 'Дата выхода последней версии сайта.');
+    add('Статистика проверена', ok(meta.lastChecked) ? fmtLong(meta.lastChecked) : 'пока не зафиксировано', 'Дата, когда источник был проверен. Запись обновляется не чаще раза в неделю.');
+    add('Значения изменились', ok(meta.lastValueUpdated) ? fmtLong(meta.lastValueUpdated) : '—', 'Дата последнего фактического изменения данных посещаемости.');
+    const box = $('#clList'); box.textContent = '';
+    if (!log.length) { box.appendChild(el('div', 'placeholder', 'Записей пока нет')); return; }
+    const sec = [['added', 'Новое'], ['changed', 'Изменено'], ['fixed', 'Исправлено']];
+    log.filter((e) => e && e.version).forEach((e) => {
+      const r = el('article', 'rel');
+      r.appendChild(el('h3', null, `${e.version}${ok(e.date) ? ' · ' + fmtLong(e.date) : ''}`));
+      sec.forEach(([k, t]) => {
+        const items = Array.isArray(e[k]) ? e[k].filter((x) => typeof x === 'string') : [];
+        if (!items.length) return;
+        r.appendChild(el('h4', null, t));
+        const ul = el('ul'); items.forEach((x) => ul.appendChild(el('li', null, x))); r.appendChild(ul);
+      });
+      box.appendChild(r);
+    });
+  }
+
+  /* ---------- Навигация между разделами ---------- */
+  const VIEWS = ['stats', 'history', 'analytics', 'sources', 'changelog'];
+  let firstRoute = true;
+  function route() {
+    let h = (location.hash || '').slice(1);
+    if (!VIEWS.includes(h)) h = 'stats';
+    VIEWS.forEach((v) => { document.getElementById('view-' + v).hidden = v !== h; });
+    document.querySelectorAll('#nav a').forEach((a) => {
+      if (a.getAttribute('href') === '#' + h) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+    if (!firstRoute) window.scrollTo(0, 0);
+    firstRoute = false;
+    if (h === 'stats') requestAnimationFrame(drawChart); // график нельзя измерить, пока блок скрыт
+  }
+  window.addEventListener('hashchange', route);
+
   /* ---------- Старт ---------- */
   (async () => {
-    const [traffic, events, communities, meta] = await Promise.all([
+    const [traffic, events, communities, documents, changelog, meta, ver] = await Promise.all([
       loadJSON('data/traffic.json', []),
       loadJSON('data/events.json', []),
       loadJSON('data/communities.json', []),
-      loadMeta('data/meta.json')
+      loadJSON('data/documents.json', []),
+      loadJSON('data/changelog.json', []),
+      loadMeta('data/meta.json'),
+      loadMeta('version.json')
     ]);
-    trafficPts = cleanTraffic(traffic);
-    renderHero(meta);
-    syncRange();
-    drawChart();
-    renderTimeline(events);
-    renderCommunities(communities);
+    try {
+      trafficPts = cleanTraffic(traffic);
+      renderHero(meta);
+      renderStats(meta);
+      syncRange();
+      route();
+      renderTimeline(events);
+      renderAnalytics();
+      renderInventory();
+      renderDocuments(documents);
+      renderCommunities(communities);
+      renderChangelog(changelog, meta, ver);
+    } finally {
+      finishLoading(); // скелетоны не должны зависнуть, даже если рендер упал
+    }
+    checkBuild(ver);
   })();
 
+  // Ссылка на репозиторий: только если сайт открыт на github.io (адрес выводится из URL)
+  (() => {
+    const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+    const repo = location.pathname.split('/')[1];
+    const a = $('#ghLink');
+    if (a && m && repo) { a.href = `https://github.com/${m[1]}/${repo}`; a.hidden = false; }
+  })();
+
+  /* ---------- Обновление сайта ---------- */
+  // Версия этой страницы сравнивается с version.json (всегда берётся из сети).
+  // Один автоматический перезапуск на версию: sessionStorage защищает от бесконечных циклов.
+  const BUILD = (document.querySelector('meta[name="archive-build"]') || {}).content;
+  const sess = {
+    get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
+  };
+  let swReg = null;
+  async function checkBuild(ver) {
+    const target = ver && typeof ver.version === 'string' ? ver.version : null;
+    if (!target || !BUILD || BUILD === 'dev' || target === BUILD) return;
+    if (swReg) swReg.update().catch(() => {}); // новый sw.js сам обновит оболочку и перезагрузит страницу
+    if (sess.get('archive-reload-target') === target) return; // уже перезагружали ради этой версии
+    sess.set('archive-reload-target', target);
+    try { await fetch('./index.html', { cache: 'reload' }); } catch { return; } // обновить HTTP-кэш HTML
+    location.reload();
+  }
+
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // Первая установка (контроллера не было) — перезагрузка не нужна. Иначе не чаще раза в 30 с.
+      if (!hadController) return;
+      const last = Number(sess.get('archive-sw-reload') || 0);
+      if (Date.now() - last < 30000) return;
+      sess.set('archive-sw-reload', String(Date.now()));
+      location.reload();
+    });
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
+      swReg = reg;
+      reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    }).catch(() => {});
   }
 })();

@@ -10,6 +10,7 @@ const path = require('path');
 
 const CDX = 'https://web.archive.org/cdx/search/cdx?url=hypestat.com%2Finfo%2Fkogama.com&output=json&filter=statuscode%3A200&filter=mimetype%3Atext%2Fhtml&fl=timestamp%2Coriginal%2Cstatuscode&collapse=timestamp%3A6';
 const FILE = path.join(__dirname, '..', 'data', 'traffic.json');
+const META_FILE = path.join(__dirname, '..', 'data', 'meta.json');
 const UA = 'KOGAMA-ARCHIVE-Wayback-Backfill/1.1 (manual historical data import)';
 const WRITE = process.argv.includes('--write');
 const LIMIT_ARG = process.argv.find(a => a.startsWith('--limit='));
@@ -169,6 +170,26 @@ function printTable(points, existing) {
   }
 }
 
+// При --write: lastValueUpdated = дата самой свежей точки в итоговом traffic.json (если она новее текущей).
+// lastChecked не трогаем: им управляет только fetch-traffic.js.
+function updateMeta(points) {
+  if (!points.length) return;
+  const newest = points.map(p => p.date).sort().pop();
+  let meta = {};
+  try { meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch {}
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
+  const current = typeof meta.lastValueUpdated === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(meta.lastValueUpdated) ? meta.lastValueUpdated : null;
+  if (current && current >= newest) {
+    console.log(`meta.json не изменён: lastValueUpdated (${current}) не старее самой свежей точки (${newest}).`);
+    return;
+  }
+  if (!('source' in meta)) meta.source = 'HypeStat';
+  if (!('lastChecked' in meta)) meta.lastChecked = null;
+  meta.lastValueUpdated = newest;
+  fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2) + '\n');
+  console.log(`meta.json: lastValueUpdated ${current || 'null'} → ${newest}.`);
+}
+
 async function main() {
   console.log('Запрашиваю список снимков HypeStat в Wayback Machine…');
   const raw = await getWithRetry(CDX);
@@ -236,6 +257,7 @@ async function main() {
   }
   fs.writeFileSync(FILE, JSON.stringify(merged, null, 2) + '\n');
   console.log(`Сохранено ${merged.length} точек в ${FILE}. Проверь значения и ссылки на снимки перед публикацией.`);
+  updateMeta(merged);
 }
 
 main().catch(err => {
