@@ -37,13 +37,15 @@
   });
 
   /* ---------- Данные ---------- */
+  const loadErrors = []; // файлы, которые не удалось загрузить (в отличие от пустых)
   async function loadJSON(path, fallback) {
     try {
       const r = await fetch(path, { cache: 'no-cache' });
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      return Array.isArray(d) ? d : fallback;
-    } catch { return fallback; }
+      if (!Array.isArray(d)) throw new Error('не массив');
+      return d;
+    } catch { loadErrors.push(path); return fallback; }
   }
 
   async function loadMeta(path) {
@@ -51,8 +53,9 @@
       const r = await fetch(path, { cache: 'no-cache' });
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
-    } catch { return {}; }
+      if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('не объект');
+      return d;
+    } catch { loadErrors.push(path); return {}; }
   }
 
   const fmtNum = (n) => Math.round(n).toLocaleString('ru-RU');
@@ -243,12 +246,33 @@
 
   const isWayback = (p) => /wayback/i.test(p.source || '');
 
+  // Заглушка: только сетка и оси, без чисел; пунктир — условная иллюстрация, а не данные
+  function placeholderChart() {
+    const failed = loadErrors.includes('data/traffic.json');
+    const box = el('div', 'chart-ph');
+    const svg = svgEl('svg', { viewBox: '0 0 600 260', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+    for (let i = 1; i <= 4; i++) svg.appendChild(svgEl('line', { class: 'ph-grid', x1: 40, x2: 580, y1: 20 + i * 44, y2: 20 + i * 44 }));
+    for (let i = 1; i <= 5; i++) svg.appendChild(svgEl('line', { class: 'ph-grid', x1: 40 + i * 90, x2: 40 + i * 90, y1: 20, y2: 240 }));
+    svg.appendChild(svgEl('line', { class: 'ph-axis', x1: 40, x2: 40, y1: 20, y2: 240 }));
+    svg.appendChild(svgEl('line', { class: 'ph-axis', x1: 40, x2: 580, y1: 240, y2: 240 }));
+    svg.appendChild(svgEl('path', { class: 'ph-line', d: 'M40 200 C120 190 160 120 240 130 S360 190 430 120 S520 70 580 90' }));
+    const t = el('div', 'ph-text');
+    t.append(
+      el('b', null, failed ? 'Данные не загрузились' : 'Ожидание первых данных'),
+      el('span', null, failed
+        ? 'Не удалось получить файл замеров. Это ошибка загрузки, а не отсутствие данных.'
+        : 'График построится автоматически после первого замера HypeStat. Пунктир — условная иллюстрация, это не данные.')
+    );
+    box.append(svg, t);
+    return box;
+  }
+
   let gradSeq = 0;
   function drawChart() {
     chartWrap.textContent = '';
     const pts = visiblePts();
     if (!pts.length) {
-      chartWrap.appendChild(el('div', 'chart-empty', 'График появится после первого замера'));
+      chartWrap.appendChild(placeholderChart());
       return;
     }
     const W = Math.max(chartWrap.clientWidth - 8, 260);
@@ -404,7 +428,7 @@
   /* ---------- Хронология ---------- */
   const STATUS_LABEL = {
     confirmed: 'Подтверждено',
-    indirect: 'Косвенное подтверждение',
+    indirect: 'Частично подтверждено',
     unverified: 'Не подтверждено'
   };
   const CATEGORY_LABEL = {
@@ -413,37 +437,45 @@
   };
   const evKey = (e) => String(e.date || e.year || '');
 
+  const DATE_NOTE = { approx: 'Приблизительная дата', year: 'Известен только год' };
+
   function renderTimeline(events) {
     const ol = $('#timeline');
     ol.textContent = '';
-    const list = events.filter((e) => e && e.label).slice();
+    const list = events.filter((e) => e && e.label).map((e) => (e.status === 'partial' ? { ...e, status: 'indirect' } : e));
     // Начало сбора данных берём из самих данных, а не из памяти
     if (trafficPts.length && !list.some((e) => e.category === 'archive')) {
       const f = trafficPts[0];
       list.push({
-        year: Number(f.date.slice(0, 4)), date: f.date, category: 'archive', status: 'confirmed',
+        year: Number(f.date.slice(0, 4)), date: f.date, dateType: 'exact', category: 'archive', status: 'confirmed',
         label: 'Первый замер посещаемости в архиве',
-        note: `Значение ${fmtNum(f.value)} визитов в месяц, источник: ${f.source}. С этой даты ведётся непрерывная история замеров архива.`
+        note: `Значение ${fmtNum(f.value)} визитов в месяц, источник: ${f.source}. С этой даты ведётся история замеров архива.`
       });
     }
     list.sort((a, b) => evKey(a).localeCompare(evKey(b)) || (Number(a.year) || 0) - (Number(b.year) || 0));
-    list.forEach((e) => {
+    list.forEach((e, i) => {
       const st = Object.prototype.hasOwnProperty.call(STATUS_LABEL, e.status) ? e.status : 'unverified';
       const li = el('li', 'st-' + st);
       const dot = el('span', 'tl-dot st-' + st);
       dot.setAttribute('role', 'img');
       dot.setAttribute('aria-label', 'Статус: ' + STATUS_LABEL[st]);
-      dot.title = STATUS_LABEL[st];
       li.appendChild(dot);
-      const when = ISO.test(e.date || '') ? fmtLong(e.date) : String(e.date || e.year || '');
-      li.appendChild(el('div', 'tl-date', when));
-      li.appendChild(el('div', 'tl-label', e.label));
-      if (e.note) li.appendChild(el('p', 'tl-note', e.note));
+      const card = el('div', 'tl-card');
+      const when = typeof e.dateLabel === 'string' ? e.dateLabel : (ISO.test(e.date || '') ? fmtLong(e.date) : String(e.date || e.year || ''));
+      card.appendChild(el('div', 'tl-date', when));
+      card.appendChild(el('div', 'tl-label', e.label));
+      if (e.note) card.appendChild(el('p', 'tl-note', e.note));
       const tags = el('div', 'tl-tags');
       tags.appendChild(el('span', 'tag st-' + st, STATUS_LABEL[st]));
+      if (e.dateType === 'approx') tags.appendChild(el('span', 'tag tg-approx', DATE_NOTE.approx));
       if (CATEGORY_LABEL[e.category]) tags.appendChild(el('span', 'tag', CATEGORY_LABEL[e.category]));
-      li.appendChild(tags);
+      card.appendChild(tags);
+
+      const det = Array.isArray(e.details) ? e.details.filter((x) => typeof x === 'string') : [];
       const srcs = Array.isArray(e.sources) ? e.sources.filter((x) => x && x.title && safeUrl(x.url)) : [];
+      const more = el('div', 'tl-more'); more.id = 'tlm' + i; more.hidden = true;
+      if (det.length) { const ul = el('ul', 'tl-det'); det.forEach((x) => ul.appendChild(el('li', null, x))); more.appendChild(ul); }
+      more.appendChild(el('p', 'tl-note', `Достоверность: ${STATUS_LABEL[st]}.${DATE_NOTE[e.dateType] && e.dateType !== 'approx' ? ' ' + DATE_NOTE[e.dateType] + '.' : ''}`));
       if (srcs.length) {
         const ul = el('ul', 'tl-src');
         srcs.forEach((x) => {
@@ -451,14 +483,25 @@
           a.href = x.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
           l.appendChild(a); ul.appendChild(l);
         });
-        li.appendChild(ul);
-      } else {
-        li.appendChild(el('p', 'tl-note muted', 'Источник не указан.'));
-      }
+        more.appendChild(ul);
+      } else more.appendChild(el('p', 'tl-note muted', 'Источник не указан.'));
+      const btn = el('button', 'tl-toggle', 'Подробнее ▾');
+      btn.type = 'button'; btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', more.id);
+      btn.addEventListener('click', () => {
+        const open = more.hidden;
+        more.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+        btn.textContent = open ? 'Свернуть ▴' : 'Подробнее ▾';
+      });
+      card.append(btn, more);
+      li.appendChild(card);
       ol.appendChild(li);
     });
     $('#tlLegend').hidden = !list.length;
+    if (!list.length) ol.appendChild(el('li', null, 'Событий пока нет'));
+    allEvents = list;
   }
+  let allEvents = [];
 
   /* ---------- Документы ---------- */
   function renderDocuments(list) {
@@ -712,7 +755,7 @@
     add('Значения изменились', ok(meta.lastValueUpdated) ? fmtLong(meta.lastValueUpdated) : '—', 'Дата последнего фактического изменения данных посещаемости.');
     const box = $('#clList'); box.textContent = '';
     if (!log.length) { box.appendChild(el('div', 'placeholder', 'Записей пока нет')); return; }
-    const sec = [['added', 'Новое'], ['changed', 'Изменено'], ['fixed', 'Исправлено']];
+    const sec = [['added', 'Новое'], ['materials', 'Материалы'], ['changed', 'Изменено'], ['fixed', 'Исправлено']];
     log.filter((e) => e && e.version).forEach((e) => {
       const r = el('article', 'rel');
       r.appendChild(el('h3', null, `${e.version}${ok(e.date) ? ' · ' + fmtLong(e.date) : ''}`));
@@ -726,17 +769,180 @@
     });
   }
 
+  /* ---------- Галерея ---------- */
+  const GCAT = { screenshot: 'Скриншоты', interface: 'Интерфейс', world: 'Игровые миры', avatar: 'Аватары', site: 'Архив сайта', event: 'События', other: 'Другое' };
+  const IMG_OK = /^img\/[\w./-]+$/; // только свои файлы: без внешних картинок и хотлинков
+  let gallery = [], galView = [], gYear = 'all', gCat = 'all', lbIdx = 0;
+  const gYearOf = (g) => String(g.year || (g.date || '').slice(0, 4) || '');
+  const gDate = (g) => (ISO.test(g.date || '') ? fmtLong(g.date) : String(g.date || g.year || 'дата неизвестна'));
+
+  function cleanGallery(raw) {
+    return raw.filter((g) => g && g.title && typeof g.image === 'string' && IMG_OK.test(g.image) && (!g.thumb || IMG_OK.test(g.thumb)))
+      .map((g) => ({ ...g, status: Object.prototype.hasOwnProperty.call(STATUS_LABEL, g.status) ? g.status : 'unverified' }));
+  }
+
+  function renderGallery() {
+    const grid = $('#galleryGrid'), fb = $('#galFilters');
+    grid.textContent = '';
+    if (!gallery.length) {
+      fb.hidden = true;
+      const e = el('div', 'empty-state');
+      e.append(el('b', null, 'Архив пополняется'), el('p', null, 'Подтверждённых изображений пока нет. Мы публикуем только реальные скриншоты и архивные материалы KoGaMa с указанием источника. Если у вас есть такие материалы, их можно предложить в разделе «Источники».'));
+      grid.appendChild(e);
+      return;
+    }
+    fb.hidden = false; fb.textContent = '';
+    const years = [...new Set(gallery.map(gYearOf).filter(Boolean))].sort();
+    const cats = [...new Set(gallery.map((g) => g.category || 'other'))];
+    const yw = el('div'); const yl = el('label', null, 'Год'); yl.htmlFor = 'gYear';
+    const ys = el('select'); ys.id = 'gYear';
+    [['all', 'Все годы'], ...years.map((y) => [y, y])].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; if (v === gYear) o.selected = true; ys.appendChild(o); });
+    ys.addEventListener('change', () => { gYear = ys.value; renderGallery(); });
+    yw.append(yl, ys);
+    const chips = el('div', 'chips'); chips.setAttribute('role', 'group'); chips.setAttribute('aria-label', 'Категория');
+    [['all', 'Все'], ...cats.map((c) => [c, GCAT[c] || GCAT.other])].forEach(([v, t]) => {
+      const b = el('button', 'chip', t); b.type = 'button'; b.setAttribute('aria-pressed', String(v === gCat));
+      b.addEventListener('click', () => { gCat = v; renderGallery(); });
+      chips.appendChild(b);
+    });
+    fb.append(yw, chips);
+    galView = gallery.filter((g) => (gYear === 'all' || gYearOf(g) === gYear) && (gCat === 'all' || (g.category || 'other') === gCat));
+    if (!galView.length) { grid.appendChild(el('div', 'empty-state', 'По выбранным фильтрам материалов нет.')); return; }
+    galView.forEach((g, i) => {
+      const b = el('button', 'g-card'); b.type = 'button'; b.setAttribute('aria-label', 'Открыть: ' + g.title);
+      const img = el('img'); img.src = g.thumb || g.image; img.alt = g.alt || g.title; img.loading = 'lazy'; img.decoding = 'async';
+      if (g.width && g.height) { img.width = g.width; img.height = g.height; }
+      const body = el('div', 'g-body'); body.append(el('b', null, g.title), el('span', null, `${gDate(g)} · ${STATUS_LABEL[g.status]}`));
+      b.append(img, body);
+      b.addEventListener('click', () => openLightbox(i));
+      grid.appendChild(b);
+    });
+  }
+
+  const lb = $('#lightbox');
+  function showLb() {
+    const g = galView[lbIdx]; if (!g) return;
+    $('#lbImg').src = g.image; $('#lbImg').alt = g.alt || g.title;
+    const cap = $('#lbCap'); cap.textContent = '';
+    cap.appendChild(el('b', null, g.title));
+    if (g.description) cap.appendChild(el('div', null, g.description));
+    cap.appendChild(el('div', 'muted', `${gDate(g)} · ${GCAT[g.category] || GCAT.other} · Достоверность: ${STATUS_LABEL[g.status]}`));
+    const sl = el('div'); sl.appendChild(document.createTextNode('Источник: '));
+    if (safeUrl(g.sourceUrl)) { const a = el('a', null, (g.source || g.sourceUrl) + ' ↗'); a.href = g.sourceUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; sl.appendChild(a); }
+    else sl.appendChild(document.createTextNode(g.source || 'не указан'));
+    cap.appendChild(sl);
+    $('#lbPrev').hidden = $('#lbNext').hidden = galView.length < 2;
+  }
+  function openLightbox(i) { lbIdx = i; showLb(); if (lb.showModal) lb.showModal(); else lb.setAttribute('open', ''); }
+  const lbStep = (d) => { lbIdx = (lbIdx + d + galView.length) % galView.length; showLb(); };
+  if (lb) {
+    $('#lbClose').addEventListener('click', () => lb.close());
+    $('#lbPrev').addEventListener('click', () => lbStep(-1));
+    $('#lbNext').addEventListener('click', () => lbStep(1));
+    lb.addEventListener('click', (e) => { if (e.target === lb) lb.close(); }); // клик по фону
+    lb.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') lbStep(-1); if (e.key === 'ArrowRight') lbStep(1); });
+  }
+
+  /* ---------- Тогда и сейчас ---------- */
+  let pairsData = [], cmpYA = null, cmpYB = null;
+
+  function renderPairs() {
+    const box = $('#pairs'); box.textContent = '';
+    const items = pairsData.filter((p) => p && p.title && p.before && p.after && IMG_OK.test(p.before.image || '') && IMG_OK.test(p.after.image || ''));
+    if (!items.length) {
+      const e = el('div', 'empty-state');
+      e.append(el('b', null, 'Архив пополняется'), el('p', null, 'Сравнений интерфейсов и миров пока нет: для них нужны подтверждённые изображения из разных периодов. Ниже можно сопоставить периоды по событиям и статистике.'));
+      box.appendChild(e); return;
+    }
+    items.forEach((p) => {
+      const w = el('article', 'pair'); w.appendChild(el('h3', 'sub', p.title));
+      if (p.description) w.appendChild(el('p', 'lead', p.description));
+      const seg = el('div', 'seg'); seg.setAttribute('role', 'group');
+      const img = el('img'); img.loading = 'lazy'; img.decoding = 'async';
+      const cap = el('p', 'chart-note');
+      const sides = [['before', p.before], ['after', p.after]];
+      const show = (k) => {
+        const d = p[k]; img.src = d.image; img.alt = d.alt || `${p.title}: ${d.label || k}`;
+        cap.textContent = `${d.label || ''} ${d.date ? '· ' + d.date : ''} ${d.source ? '· Источник: ' + d.source : ''} · Достоверность: ${STATUS_LABEL[d.status] || STATUS_LABEL.unverified}`;
+        seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.k === k)));
+      };
+      sides.forEach(([k, d]) => { const b = el('button', null, d.label || (k === 'before' ? 'Тогда' : 'Сейчас')); b.type = 'button'; b.dataset.k = k; b.addEventListener('click', () => show(k)); seg.appendChild(b); });
+      w.append(seg, img, cap); box.appendChild(w); show('before');
+    });
+  }
+
+  function renderPeriodCmp() {
+    const box = $('#periodCmp'); box.textContent = '';
+    const evYears = allEvents.map((e) => String(e.year || '')).filter(Boolean);
+    const years = [...new Set([...evYears, ...trafficPts.map((p) => p.date.slice(0, 4))])].sort();
+    box.appendChild(el('h3', 'sub', 'Сопоставление периодов'));
+    if (years.length < 2) { box.appendChild(el('div', 'notice', 'Для сопоставления нужны сведения как минимум за два разных года. Пока их недостаточно.')); return; }
+    if (!years.includes(cmpYA) || !years.includes(cmpYB)) { cmpYA = years[0]; cmpYB = years[years.length - 1]; }
+    const sel = el('div', 'cmp');
+    const mk = (id, label, val, cb) => {
+      const w = el('div'); const l = el('label', null, label); l.htmlFor = id; const s2 = el('select'); s2.id = id;
+      years.forEach((y) => { const o = el('option', null, y); o.value = y; if (y === val) o.selected = true; s2.appendChild(o); });
+      s2.addEventListener('change', () => { cb(s2.value); renderPeriodCmp(); }); w.append(l, s2); return w;
+    };
+    sel.append(mk('pyA', 'Год A', cmpYA, (v) => { cmpYA = v; }), mk('pyB', 'Год B', cmpYB, (v) => { cmpYB = v; }));
+    box.appendChild(sel);
+    const cols = el('div', 'pcols');
+    [cmpYA, cmpYB].forEach((y) => {
+      const c = el('div', 'pcol'); c.appendChild(el('h4', null, y));
+      const evs = allEvents.filter((e) => String(e.year) === y);
+      if (evs.length) { const ul = el('ul', 'tl-det'); evs.forEach((e) => ul.appendChild(el('li', null, `${e.label} — ${STATUS_LABEL[e.status] || STATUS_LABEL.unverified}`))); c.appendChild(ul); }
+      else c.appendChild(el('p', 'chart-note', 'Событий за этот год в архиве нет.'));
+      const st = A && A.periodStats(trafficPts, y);
+      if (st) c.appendChild(el('p', 'chart-note', `Посещаемость (оценка HypeStat): среднее ${fmtNum(st.avg)} визитов/мес по ${st.count} ${plural(st.count, ['замеру', 'замерам', 'замерам'])}.`));
+      else c.appendChild(el('p', 'chart-note', 'Замеров посещаемости за этот год нет.'));
+      cols.appendChild(c);
+    });
+    box.appendChild(cols);
+    const r = A && A.comparePeriods(trafficPts, cmpYA, cmpYB);
+    if (r) box.appendChild(el('div', 'li', `Среднее изменилось на ${fmtPct(r.pct)} (оценка по имеющимся замерам, без выводов о причинах).`));
+    else box.appendChild(el('p', 'chart-note', 'Статистическое сравнение недоступно: нужны замеры за оба года.'));
+  }
+
+  /* ---------- Главная ---------- */
+  function renderHome(docs) {
+    const t = $('#homeTiles'); t.textContent = '';
+    const mk = (href, title, n, text) => {
+      const a = el('a', 'tile'); a.href = href;
+      a.append(el('b', null, title));
+      if (n != null) a.appendChild(el('span', 'tile-n', String(n)));
+      a.appendChild(el('span', null, text)); t.appendChild(a);
+    };
+    const nEv = allEvents.length, nPts = trafficPts.length;
+    mk('#history', 'История платформы', nEv || null, nEv ? plural(nEv, ['событие', 'события', 'событий']) + ' в хронологии' : 'События появятся позже');
+    mk('#stats', 'Архив статистики', nPts || null, nPts ? plural(nPts, ['замер', 'замера', 'замеров']) + ' посещаемости' : 'Ожидание первых данных');
+    mk('#gallery', 'Исторические материалы', gallery.length || null, gallery.length ? plural(gallery.length, ['изображение', 'изображения', 'изображений']) : 'Архив пополняется');
+    mk('#sources', 'Источники информации', docs.length || null, docs.length ? plural(docs.length, ['документ', 'документа', 'документов']) + ' и 5 категорий достоверности' : '5 категорий достоверности');
+    // Фон: только настоящий архивный материал, помеченный в gallery.json как hero и подтверждённый
+    const h = gallery.find((g) => g.hero === true && g.status === 'confirmed');
+    const bg = $('#landingBg'), cr = $('#landingCredit');
+    if (h) {
+      bg.classList.add('has-img'); bg.style.backgroundImage = `url("${h.image}")`;
+      cr.hidden = false; cr.textContent = `Фон: ${h.title}${h.source ? ' · источник: ' + h.source : ''}`;
+    }
+  }
+
   /* ---------- Навигация между разделами ---------- */
-  const VIEWS = ['stats', 'history', 'analytics', 'sources', 'changelog'];
+  const VIEWS = ['home', 'stats', 'history', 'gallery', 'compare', 'analytics', 'sources', 'changelog'];
+  const TITLES = { home: 'История и статистика KoGaMa', stats: 'Статистика', history: 'История KoGaMa', gallery: 'Галерея', compare: 'KoGaMa тогда и сейчас', analytics: 'Аналитика', sources: 'Источники', changelog: 'Журнал изменений' };
   let firstRoute = true;
   function route() {
     let h = (location.hash || '').slice(1);
-    if (!VIEWS.includes(h)) h = 'stats';
+    const anchor = h === 'about';
+    if (anchor) h = 'home';
+    if (!VIEWS.includes(h)) h = 'home';
     VIEWS.forEach((v) => { document.getElementById('view-' + v).hidden = v !== h; });
     document.querySelectorAll('#nav a').forEach((a) => {
-      if (a.getAttribute('href') === '#' + h) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      const on = a.getAttribute('href') === '#' + h;
+      if (on) { a.setAttribute('aria-current', 'page'); if (a.scrollIntoView) a.scrollIntoView({ inline: 'center', block: 'nearest' }); } else a.removeAttribute('aria-current');
     });
-    if (!firstRoute) window.scrollTo(0, 0);
+    document.title = h === 'home' ? 'KOGAMA ARCHIVE — История и статистика KoGaMa' : `${TITLES[h]} — KOGAMA ARCHIVE`;
+    if (anchor) { const t = document.getElementById('about'); if (t) t.scrollIntoView(); }
+    else if (!firstRoute) window.scrollTo(0, 0);
     firstRoute = false;
     if (h === 'stats') requestAnimationFrame(drawChart); // график нельзя измерить, пока блок скрыт
   }
@@ -744,12 +950,14 @@
 
   /* ---------- Старт ---------- */
   (async () => {
-    const [traffic, events, communities, documents, changelog, meta, ver] = await Promise.all([
+    const [traffic, events, communities, documents, changelog, galleryRaw, pairsRaw, meta, ver] = await Promise.all([
       loadJSON('data/traffic.json', []),
       loadJSON('data/events.json', []),
       loadJSON('data/communities.json', []),
       loadJSON('data/documents.json', []),
       loadJSON('data/changelog.json', []),
+      loadJSON('data/gallery.json', []),
+      loadJSON('data/compare.json', []),
       loadMeta('data/meta.json'),
       loadMeta('version.json')
     ]);
@@ -765,19 +973,28 @@
       renderDocuments(documents);
       renderCommunities(communities);
       renderChangelog(changelog, meta, ver);
+      gallery = cleanGallery(galleryRaw); pairsData = pairsRaw;
+      renderGallery(); renderPairs(); renderPeriodCmp();
+      renderHome(documents.filter((d) => d && d.title && safeUrl(d.url)));
+      const lv = changelog.find((e) => e && e.version);
+      $('#footVer').textContent = lv ? `Версия сайта ${lv.version}` : '';
+      showLoadErrors();
     } finally {
       finishLoading(); // скелетоны не должны зависнуть, даже если рендер упал
     }
     checkBuild(ver);
   })();
 
-  // Ссылка на репозиторий: только если сайт открыт на github.io (адрес выводится из URL)
-  (() => {
-    const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
-    const repo = location.pathname.split('/')[1];
-    const a = $('#ghLink');
-    if (a && m && repo) { a.href = `https://github.com/${m[1]}/${repo}`; a.hidden = false; }
-  })();
+  // Ошибка загрузки — это не то же самое, что «данных пока нет»
+  function showLoadErrors() {
+    if (!loadErrors.length) return;
+    const b = $('#loadBanner');
+    b.hidden = false;
+    b.textContent = location.protocol === 'file:'
+      ? 'Данные не загрузились: страница открыта как локальный файл (file://), а браузер запрещает ему читать JSON. Запустите локальный сервер (например, «python -m http.server» в папке проекта) или откройте опубликованный сайт.'
+      : `Не удалось загрузить часть данных (${[...new Set(loadErrors)].join(', ')}). Проверьте подключение и обновите страницу; сайт покажет последние сохранённые данные, если они есть.`;
+    if (!trafficPts.length) drawChart();
+  }
 
   /* ---------- Обновление сайта ---------- */
   // Версия этой страницы сравнивается с version.json (всегда берётся из сети).

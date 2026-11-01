@@ -12,7 +12,7 @@ const ok = (c, m) => { console.log((c ? 'OK   ' : 'FAIL ') + m); if (!c) failed+
 for (const f of [...fs.readdirSync(path.join(ROOT, 'data')).map((x) => 'data/' + x), 'manifest.json', 'version.json']) {
   try { JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8')); ok(true, 'JSON ' + f); } catch (e) { ok(false, 'JSON ' + f + ': ' + e.message); }
 }
-for (const f of ['app.js', 'analytics.js', 'sw.js', 'scripts/fetch-traffic.js', 'scripts/backfill-wayback.js', 'scripts/stamp-version.js']) {
+for (const f of ['scripts/smoke.js', 'app.js', 'analytics.js', 'sw.js', 'scripts/fetch-traffic.js', 'scripts/backfill-wayback.js', 'scripts/stamp-version.js']) {
   try { execFileSync(process.execPath, ['--check', path.join(ROOT, f)]); ok(true, 'JS ' + f); } catch (e) { ok(false, 'JS ' + f); }
 }
 
@@ -21,6 +21,18 @@ const traffic = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/traffic.json'),
 ok(Array.isArray(traffic) && traffic.every((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.date) && p.value > 0), 'traffic.json: даты и значения корректны');
 const dates = traffic.map((p) => p.date);
 ok(dates.length === new Set(dates).size && dates.every((d, i) => !i || d > dates[i - 1]), 'traffic.json: даты уникальны и по возрастанию');
+
+// 2b. Галерея и сравнения: только свои файлы img/, существующие на диске, с источником и датой
+for (const f of ['data/gallery.json', 'data/compare.json']) {
+  const arr = JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'));
+  ok(Array.isArray(arr), f + ': массив');
+  const imgs = f.includes('gallery') ? arr.map((g) => g.image) : arr.flatMap((p) => [p.before && p.before.image, p.after && p.after.image]);
+  ok(imgs.every((i) => typeof i === 'string' && /^img\/[\w./-]+$/.test(i) && fs.existsSync(path.join(ROOT, i))), f + ': все изображения существуют в img/');
+  if (f.includes('gallery')) ok(arr.every((g) => g.title && g.source && g.date && g.status), f + ': у каждого материала есть название, источник, дата и статус');
+}
+const idxHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+ok(idxHtml.includes('href="https://github.com/reallyn1ce/reallyn1ce.github.io"'), 'footer: ссылка на репозиторий');
+ok(/<a class="logo" href="#home"/.test(idxHtml), 'логотип ведёт на главную');
 
 // 3. Версия ресурсов проставлена
 try { execFileSync(process.execPath, [path.join(__dirname, 'stamp-version.js'), '--check'], { stdio: 'pipe' }); ok(true, 'версия ресурсов проставлена'); }

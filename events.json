@@ -1,51 +1,95 @@
 [
   {
-    "year": 2011, "date": "2011", "category": "start",
+    "year": 2011,
+    "date": "2011",
+    "category": "start",
     "label": "Запуск KoGaMa",
     "note": "Платформа разработана датской компанией Multiverse ApS и опубликована в 2011 году. Год подтверждён отчётностью Adventure Box Technology AB. Конкретная дата (17 сентября) из прежних заметок архива документально не подтверждена.",
     "status": "confirmed",
     "sources": [
-      { "title": "Годовой отчёт Adventure Box Technology AB за 2022", "url": "https://l.cdn.bequoted.com/3/59768" }
-    ]
+      {
+        "title": "Годовой отчёт Adventure Box Technology AB за 2022",
+        "url": "https://l.cdn.bequoted.com/3/59768"
+      }
+    ],
+    "dateType": "year"
   },
   {
-    "year": 2014, "date": "около 2014", "category": "popularity",
+    "year": 2014,
+    "date": "около 2014",
+    "category": "popularity",
     "label": "Рост популярности",
     "note": "Серверы в Америке, 100k+ игроков в день (BR). Сведения из прежних заметок архива, источник не указан.",
-    "status": "unverified"
+    "status": "unverified",
+    "dateType": "approx"
   },
   {
-    "year": 2019, "date": "2019", "category": "other",
+    "year": 2019,
+    "date": "2019",
+    "category": "other",
     "label": "Spilprisen «Best Live Game»",
     "note": "Награда за лучшую живую игру в Дании. Сведения из прежних заметок архива, источник не указан.",
-    "status": "unverified"
+    "status": "unverified",
+    "dateType": "year"
   },
   {
-    "year": 2022, "date": "2022-09-30", "category": "company",
+    "year": 2022,
+    "date": "2022-09-30",
+    "category": "company",
     "label": "Приобретение Multiverse ApS компанией Adventure Box Technology AB",
     "note": "30 сентября 2022 года объявлено о приобретении датской Multiverse ApS, владевшей KoGaMa. Осенью 2022 года прежняя платформа Adventure Box была заменена на KoGaMa; дальнейшее развитие компания связывала с социальными функциями, мобильной совместимостью и монетизацией.",
     "status": "confirmed",
     "sources": [
-      { "title": "Отчёт Adventure Box Technology AB за 2022 год (MFN)", "url": "https://mfn.se/beq/a/adventure-box-technology/interim-report-for-the-financial-year-2022-b87acc1f" }
+      {
+        "title": "Отчёт Adventure Box Technology AB за 2022 год (MFN)",
+        "url": "https://mfn.se/beq/a/adventure-box-technology/interim-report-for-the-financial-year-2022-b87acc1f"
+      }
+    ],
+    "dateType": "exact",
+    "details": [
+      "30 сентября 2022 года объявлено о приобретении Multiverse ApS компанией Adventure Box Technology AB.",
+      "7 октября 2022 года новым CEO Adventure Box стал Michal Bendtsen (по отчёту компании).",
+      "Осенью 2022 года прежняя платформа Adventure Box была заменена на KoGaMa."
     ]
   },
   {
-    "year": 2026, "date": "2026-05-29", "category": "platform",
+    "year": 2026,
+    "date": "2026-05-29",
+    "category": "platform",
     "label": "Закрытие прежнего сайта и игровых серверов KoGaMa",
     "note": "В официальном объявлении на kogama.com сказано, что сайт, аккаунты и весь пользовательский контент уйдут в офлайн не позже 29 мая; данные не переносятся на новую платформу, а KoGaMa «перестраивается с нуля». Дата публикации объявления в архиве не установлена. Вики сообщества называет моментом отключения 28 мая 2026 — это неофициальный источник, расхождение в один день не разрешено.",
     "status": "confirmed",
     "sources": [
-      { "title": "Официальное объявление на kogama.com", "url": "https://kogama.com/" },
-      { "title": "Kogama Wiki (сообщество): события перед закрытием", "url": "https://kogama.fandom.com/wiki/Events_before_KoGaMa_shutdown" }
+      {
+        "title": "Официальное объявление на kogama.com",
+        "url": "https://kogama.com/"
+      },
+      {
+        "title": "Kogama Wiki (сообщество): события перед закрытием",
+        "url": "https://kogama.fandom.com/wiki/Events_before_KoGaMa_shutdown"
+      }
+    ],
+    "dateType": "exact",
+    "dateLabel": "не позднее 29 мая 2026",
+    "details": [
+      "Официальное объявление: сайт и игровые серверы закрываются, всё, что связано с сайтом, уйдёт в офлайн не позже 29 мая.",
+      "Аккаунты и пользовательский контент не переносятся на новую платформу; зашифрованные резервные копии сохраняются по юридическим причинам (по тексту объявления).",
+      "Публичной даты запуска новой версии в объявлении нет."
     ]
   },
   {
-    "year": 2026, "date": "2026", "category": "platform",
+    "year": 2026,
+    "date": "2026",
+    "category": "platform",
     "label": "KoGaMa Space и новый этап платформы",
     "note": "Подтверждённых сведений о том, что именно представляет собой KoGaMa Space, в архиве пока нет: название встречается лишь в описаниях видео сообщества, без пояснений. Известно только из официального объявления, что новая версия разрабатывается, а публичной даты её запуска нет. Раздел будет дополнен после появления проверяемых источников.",
     "status": "unverified",
     "sources": [
-      { "title": "Официальное объявление на kogama.com", "url": "https://kogama.com/" }
-    ]
+      {
+        "title": "Официальное объявление на kogama.com",
+        "url": "https://kogama.com/"
+      }
+    ],
+    "dateType": "year"
   }
 ]

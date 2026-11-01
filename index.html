@@ -3,15 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KOGAMA ARCHIVE</title>
-<meta name="description" content="Памятка о KoGaMa: посещаемость, хронология, сообщества.">
-<meta property="og:title" content="KOGAMA ARCHIVE">
-<meta property="og:description" content="Памятка о KoGaMa: посещаемость, хронология, сообщества.">
+<title>KOGAMA ARCHIVE — История и статистика KoGaMa</title>
+<meta name="description" content="Независимый цифровой архив истории KoGaMa: статистика посещаемости, хронология событий, источники и архивные материалы.">
+<meta property="og:title" content="KOGAMA ARCHIVE — История и статистика KoGaMa">
+<meta property="og:description" content="Независимый цифровой архив истории KoGaMa: статистика, события, источники и материалы.">
 <meta property="og:type" content="website">
-<!-- Картинку положи в img/og-preview.png. Для превью в соцсетях позже замени на абсолютный URL сайта. -->
-<meta property="og:image" content="./img/og-preview.png">
+<meta property="og:locale" content="ru_RU">
 <meta name="theme-color" content="#0c0d12">
-<meta name="archive-build" content="2b75f698daf6">
+<meta name="archive-build" content="a2cfe02bccda">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -22,24 +21,58 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./style.css?v=2b75f698daf6">
+<link rel="stylesheet" href="./style.css?v=a2cfe02bccda">
 <noscript><style>.sk,.sk-chart{display:none}.hero.is-loading .hero-num{background:none;color:var(--accent)}</style></noscript>
 </head>
 <body>
+<a class="skip" href="#main">К содержимому</a>
 <header class="header">
-  <a class="logo" href="./">KOGAMA ARCHIVE</a>
+  <a class="logo" href="#home" aria-label="KOGAMA ARCHIVE — на главную">KOGAMA ARCHIVE</a>
   <button class="icon-btn" id="themeToggle" type="button" aria-label="Сменить тему"></button>
 <nav class="nav" id="nav" aria-label="Разделы архива">
+  <a href="#home">Главная</a>
   <a href="#stats">Статистика</a>
   <a href="#history">История</a>
+  <a href="#gallery">Галерея</a>
+  <a href="#compare">Тогда и сейчас</a>
   <a href="#analytics">Аналитика</a>
   <a href="#sources">Источники</a>
   <a href="#changelog">Журнал</a>
 </nav>
 </header>
 
-<main class="page">
-<div class="view" id="view-stats">
+<main class="page" id="main">
+<div class="banner" id="loadBanner" role="alert" hidden></div>
+<div class="view" id="view-home">
+  <section class="landing" id="landing" aria-labelledby="homeTitle">
+    <div class="landing-bg" id="landingBg" aria-hidden="true"></div>
+    <div class="landing-in">
+      <p class="eyebrow">KOGAMA ARCHIVE</p>
+      <h1 id="homeTitle">Сохраняем историю KoGaMa</h1>
+      <p class="landing-lead">Независимый цифровой архив, посвящённый истории KoGaMa. Мы сохраняем статистику, события и материалы, чтобы история платформы не исчезла со временем.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#stats">Изучить статистику</a>
+        <a class="btn" href="#history">История KoGaMa</a>
+        <a class="btn" href="#about">О проекте</a>
+      </div>
+      <p class="landing-credit" id="landingCredit" hidden></p>
+    </div>
+  </section>
+  <section class="tiles" id="homeTiles" aria-label="Содержание архива"></section>
+  <section class="section about" id="about" aria-labelledby="about-title">
+    <h2 id="about-title">О проекте</h2>
+    <p>KoGaMa — это не только игровая платформа, но и часть истории интернет-сообщества. KOGAMA ARCHIVE создан для сохранения этой истории: проект документирует изменения популярности платформы, собирает доступную статистику, архивные материалы и важные события.</p>
+    <p>Архив сохраняет информацию о KoGaMa для нынешних и будущих поколений пользователей. Мы разделяем подтверждённые сведения, оценки сторонних сервисов и предположения, а чего не знаем — не придумываем.</p>
+    <p class="muted">KOGAMA ARCHIVE — независимый неофициальный проект. Не связан с разработчиками и владельцами KoGaMa.</p>
+    <div class="suggest">
+      <h3>Предложить материал для архива</h3>
+      <p>Старые скриншоты, архивные ссылки, документы и сведения о событиях KoGaMa можно прислать через GitHub Issues. Предложенные материалы могут проходить проверку перед публикацией; публикация не гарантируется. Для отправки нужна учётная запись GitHub.</p>
+      <p><a class="btn btn-primary" href="https://github.com/reallyn1ce/reallyn1ce.github.io/issues/new?template=material.yml" target="_blank" rel="noopener noreferrer">Предложить материал ↗</a></p>
+    </div>
+  </section>
+</div>
+
+<div class="view" id="view-stats" hidden>
   <section class="hero is-loading" aria-labelledby="heroNum" aria-busy="true">
     <p class="hero-label">Посещаемость kogama.com</p>
     <div class="hero-num" id="heroNum" aria-live="polite">—</div>
@@ -89,9 +122,28 @@
     <ol class="timeline" id="timeline"></ol>
     <ul class="legend" id="tlLegend" aria-label="Статусы достоверности событий" hidden>
       <li><span class="lg-dot st-confirmed" aria-hidden="true"></span>Подтверждено</li>
-      <li><span class="lg-dot st-indirect" aria-hidden="true"></span>Косвенное подтверждение</li>
+      <li><span class="lg-dot st-indirect" aria-hidden="true"></span>Частично подтверждено</li>
       <li><span class="lg-dot st-unverified" aria-hidden="true"></span>Не подтверждено</li>
+      <li><span class="lg-dot lg-approx" aria-hidden="true"></span>Приблизительная дата</li>
     </ul>
+  </section>
+</div>
+
+<div class="view" id="view-gallery" hidden>
+  <section class="section" aria-labelledby="gal-title">
+    <h2 id="gal-title">Галерея</h2>
+    <p class="lead">Только реальные скриншоты и архивные материалы KoGaMa, у каждого указаны дата, источник и статус достоверности. Изображения без подтверждённого происхождения не выдаются за исторические документы.</p>
+    <div class="filters" id="galFilters" hidden></div>
+    <div class="gallery" id="galleryGrid"></div>
+  </section>
+</div>
+
+<div class="view" id="view-compare" hidden>
+  <section class="section" aria-labelledby="cmp-title">
+    <h2 id="cmp-title">KoGaMa тогда и сейчас</h2>
+    <p class="lead">Сопоставление разных периодов платформы. Показываются только сохранённые события, замеры и материалы: если для периода ничего нет, это так и указано.</p>
+    <div id="pairs"></div>
+    <div id="periodCmp"></div>
   </section>
 </div>
 
@@ -120,12 +172,22 @@
 
   <section class="section" aria-labelledby="docs-title">
     <h2 id="docs-title">Документы и материалы</h2>
+    <p class="lead">Объявления, архивные страницы и публикации с названием, датой и источником. Фиктивных документов в архиве нет.</p>
     <div class="cards" id="documents"></div>
   </section>
 
   <section class="section" aria-labelledby="cm-title">
     <h2 id="cm-title">KoGaMa-сообщества</h2>
     <div class="cards" id="communities"></div>
+  </section>
+
+  <section class="section" aria-labelledby="sug-title">
+    <h2 id="sug-title">Помочь архиву</h2>
+    <div class="suggest">
+      <h3>Предложить материал для архива</h3>
+      <p>Старые скриншоты, архивные ссылки, документы и сведения о событиях KoGaMa можно прислать через GitHub Issues. Предложенные материалы могут проходить проверку перед публикацией; публикация не гарантируется. Для отправки нужна учётная запись GitHub.</p>
+      <p><a class="btn btn-primary" href="https://github.com/reallyn1ce/reallyn1ce.github.io/issues/new?template=material.yml" target="_blank" rel="noopener noreferrer">Предложить материал ↗</a></p>
+    </div>
   </section>
 </div>
 
@@ -140,11 +202,34 @@
 </main>
 
 <footer class="footer">
-  <p>Неофициальный независимый проект. Не связан с разработчиками и владельцами KoGaMa.</p>
-  <p class="footer-links"><a href="data/traffic.json">Исходные данные (JSON)</a><a id="ghLink" href="#" target="_blank" rel="noopener noreferrer" hidden>GitHub</a></p>
+  <div class="footer-in">
+    <div class="f-col f-brand">
+      <p class="f-logo">KOGAMA ARCHIVE</p>
+      <p>Независимый цифровой архив истории KoGaMa.</p>
+      <p class="f-ver" id="footVer"></p>
+    </div>
+    <nav class="f-col" aria-label="Разделы (подвал)">
+      <p class="f-h">Разделы</p>
+      <a href="#home">Главная</a><a href="#stats">Статистика</a><a href="#history">История</a><a href="#gallery">Галерея</a><a href="#compare">Тогда и сейчас</a><a href="#analytics">Аналитика</a><a href="#sources">Источники</a><a href="#changelog">Журнал</a>
+    </nav>
+    <div class="f-col">
+      <p class="f-h">Проект</p>
+      <a href="https://github.com/reallyn1ce/reallyn1ce.github.io" target="_blank" rel="noopener noreferrer">Исходный код на GitHub</a>
+      <a href="#sources">Документы и источники</a>
+      <a href="data/traffic.json">Исходные данные (JSON)</a>
+    </div>
+  </div>
+  <p class="f-note">KOGAMA ARCHIVE — независимый неофициальный проект. Не связан с разработчиками и владельцами KoGaMa. Данные HypeStat являются оценкой стороннего сервиса и не представляют собой официальную статистику KoGaMa.</p>
 </footer>
 
-<script src="./analytics.js?v=2b75f698daf6"></script>
-<script src="./app.js?v=2b75f698daf6"></script>
+<dialog class="lightbox" id="lightbox" aria-label="Просмотр изображения">
+  <button class="lb-close" id="lbClose" type="button" aria-label="Закрыть">✕</button>
+  <button class="lb-nav lb-prev" id="lbPrev" type="button" aria-label="Предыдущее">‹</button>
+  <figure class="lb-fig"><img id="lbImg" alt=""><figcaption id="lbCap"></figcaption></figure>
+  <button class="lb-nav lb-next" id="lbNext" type="button" aria-label="Следующее">›</button>
+</dialog>
+
+<script src="./analytics.js?v=a2cfe02bccda"></script>
+<script src="./app.js?v=a2cfe02bccda"></script>
 </body>
 </html>

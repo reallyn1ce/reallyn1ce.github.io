@@ -1,9 +1,10 @@
 // Service Worker KOGAMA ARCHIVE.
 // VERSION подставляется скриптом scripts/stamp-version.js (хеш содержимого ресурсов).
 // Любое изменение HTML/CSS/JS/иконок меняет VERSION -> меняется sw.js -> браузер ставит новую версию.
-const VERSION = '2b75f698daf6';
+const VERSION = 'a2cfe02bccda';
 const SHELL_CACHE = 'archive-shell-' + VERSION; // оболочка сайта: целиком одной версии
 const DATA_CACHE = 'archive-data';              // JSON-данные: живут между версиями, нужны для офлайна
+const IMG_CACHE = 'archive-img';                // архивные изображения: файлы не меняются, грузим один раз
 
 const REQUIRED = [
   './index.html',
@@ -14,7 +15,8 @@ const REQUIRED = [
 const OPTIONAL = ['./', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 const DATA = [
   './data/traffic.json', './data/meta.json', './data/events.json',
-  './data/communities.json', './data/documents.json', './data/changelog.json', './version.json'
+  './data/communities.json', './data/documents.json', './data/changelog.json',
+  './data/gallery.json', './data/compare.json', './version.json'
 ];
 
 const fresh = (u) => new Request(u, { cache: 'reload' }); // в обход HTTP-кэша GitHub Pages (max-age=600)
@@ -37,7 +39,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys
-      .filter((k) => k !== SHELL_CACHE && k !== DATA_CACHE) // старые оболочки и legacy «archive-v9»
+      .filter((k) => k !== SHELL_CACHE && k !== DATA_CACHE && k !== IMG_CACHE) // старые оболочки и legacy «archive-v9»
       .map((k) => caches.delete(k)));
     await self.clients.claim();
   })());
@@ -73,6 +75,21 @@ self.addEventListener('fetch', (e) => {
   // Данные и файл версии: всегда пробуем свежее, офлайн — последняя сохранённая копия
   if (url.pathname.includes('/data/') || url.pathname.endsWith('/version.json')) {
     e.respondWith(networkFirst(req, DATA_CACHE, 6000));
+    return;
+  }
+
+  // Архивные изображения: кэш-первым и между версиями сайта (новое изображение — новое имя файла)
+  if (url.pathname.includes('/img/')) {
+    e.respondWith((async () => {
+      const c = await caches.open(IMG_CACHE);
+      const hit = await c.match(req);
+      if (hit) return hit;
+      try {
+        const res = await fetch(req);
+        if (res.ok) c.put(req, res.clone()).catch(() => {});
+        return res;
+      } catch { return Response.error(); }
+    })());
     return;
   }
 

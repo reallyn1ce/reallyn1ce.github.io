@@ -1,7 +1,7 @@
 {
   "name": "KOGAMA ARCHIVE",
   "short_name": "ARCHIVE",
-  "description": "Памятка о KoGaMa",
+  "description": "Независимый цифровой архив истории KoGaMa",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
