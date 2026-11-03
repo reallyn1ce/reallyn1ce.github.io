@@ -30,6 +30,23 @@ for (const f of ['data/gallery.json', 'data/compare.json']) {
   ok(imgs.every((i) => typeof i === 'string' && /^img\/[\w./-]+$/.test(i) && fs.existsSync(path.join(ROOT, i))), f + ': все изображения существуют в img/');
   if (f.includes('gallery')) ok(arr.every((g) => g.title && g.source && g.date && g.status), f + ': у каждого материала есть название, источник, дата и статус');
 }
+
+// 2c. Летопись и сообщества (Stage 7)
+{
+  const evs = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/events.json'), 'utf8'));
+  const yrs = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/years.json'), 'utf8'));
+  const STs = ['confirmed', 'indirect', 'unverified'];
+  ok(evs.every((e) => e.year && e.date && e.label && STs.includes(e.status)), 'events.json: у каждого события год, дата, заголовок и допустимый статус');
+  ok(evs.every((e) => (e.sources || []).every((s) => s.title && (!s.url || /^https?:\/\//.test(s.url)))), 'events.json: источники с названием, ссылки http(s)');
+  ok(evs.every((e) => (e.media || []).every((m) => ['video', 'image', 'archive', 'document'].includes(m.type) && m.title && /^https?:\/\//.test(m.url))), 'events.json: материалы имеют тип, название и ссылку');
+  ok(evs.every((e) => /^\d{4}$/.test(String(e.year)) && String(e.date).startsWith(String(e.year))), 'events.json: год события совпадает с датой');
+  ok(yrs.length === 16 && yrs[0].year === 2011 && yrs[15].year === 2026, 'years.json: годы 2011–2026');
+  const comm = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/communities.json'), 'utf8'));
+  ok(comm.every((c) => c.id && c.name && /^https?:\/\//.test(c.url) && ['official', 'independent', 'fan'].includes(c.type)), 'communities.json: id, название, ссылка и тип');
+  ok(new Set(comm.map((c) => c.id)).size === comm.length, 'communities.json: id уникальны');
+  ok(comm.every((c) => !c.icon || (/^img\/[\w./-]+$/.test(c.icon) && fs.existsSync(path.join(ROOT, c.icon)))), 'communities.json: иконки существуют в img/');
+  ok(comm[0] && comm[0].pinned && comm[0].url === 'https://discord.gg/kogama', 'communities.json: первым закреплён официальный Discord');
+}
 const idxHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 ok(idxHtml.includes('href="https://github.com/reallyn1ce/reallyn1ce.github.io"'), 'footer: ссылка на репозиторий');
 ok(/<a class="logo" href="#home"/.test(idxHtml), 'логотип ведёт на главную');
