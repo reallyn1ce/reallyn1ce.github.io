@@ -392,3 +392,36 @@ details.more{margin-top:8px} details.more summary{cursor:pointer;color:var(--acc
 .f-note{max-width:720px;margin:0 auto;padding:12px 16px 28px;font-size:12px;line-height:1.55;color:var(--text3)}
 .footer p+p{margin-top:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Stage 7: летопись по годам */
+.timeline{padding-left:0}
+.timeline::before{display:none}
+.timeline li.yr-item{padding-bottom:10px}
+.yr{background:var(--bg-card);border:1px solid var(--border);border-radius:8px}
+.yr[open]{border-color:var(--text3)}
+.yr>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:14px 16px;cursor:pointer;min-height:44px;list-style:none}
+.yr>summary::-webkit-details-marker{display:none}
+.yr>summary::after{content:"▾";margin-left:auto;color:var(--accent2)}
+.yr[open]>summary::after{content:"▴"}
+.yr-n{font-family:var(--font-mono);font-weight:700;font-size:18px;color:var(--accent2)}
+.yr-t{flex:1 1 200px;font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.yr-c{font-family:var(--font-mono);font-size:11px;color:var(--text3)}
+.yr-empty .yr-n{color:var(--text3)}
+.yr-body{padding:0 12px 12px;display:grid;gap:10px}
+.yr-body .tl-card{border-left:3px solid var(--st,var(--text3));background:var(--bg-main)}
+.yr-body .tl-note{margin-top:8px;line-height:1.6;overflow-wrap:anywhere}
+.yr-body .tl-det{margin-top:8px}
+.tl-src{list-style:none;margin-top:8px;font-size:13px;display:grid;gap:4px}
+.tl-media{margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);display:grid;gap:8px;font-size:13px}
+.tl-mh{font-family:var(--font-mono);font-size:11px;color:var(--text3)}
+.tl-m{display:grid;gap:2px;overflow-wrap:anywhere}
+.tl-video{width:100%;aspect-ratio:16/9;border:0;border-radius:6px;margin-top:6px}
+
+/* Stage 7: сообщества */
+.cm-h{margin:22px 0 4px;font-size:16px}
+.cm-lead{margin-bottom:10px;font-size:13px;color:var(--text3)}
+.cm-card.official{border-color:var(--accent2)}
+.cm-card.pinned{box-shadow:0 0 0 1px var(--accent2) inset}
+.cm-ico{flex:none;width:36px;height:36px;border-radius:8px;object-fit:cover}
+.cm-ico-ph{display:inline-flex;align-items:center;justify-content:center;background:var(--bg-main);border:1px solid var(--border);font-family:var(--font-mono);font-weight:700;color:var(--accent2)}
+.badge.cm-off,.badge.cm-pin{border-color:var(--accent2)}

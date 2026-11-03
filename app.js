@@ -429,17 +429,81 @@
   const STATUS_LABEL = {
     confirmed: 'Подтверждено',
     indirect: 'Частично подтверждено',
-    unverified: 'Не подтверждено'
+    unverified: 'Требует проверки'
   };
   const CATEGORY_LABEL = {
-    start: 'Начало', company: 'Компания', platform: 'Платформа', popularity: 'Популярность',
+    start: 'Начало', update: 'Обновление', server: 'Сервер', event: 'Мероприятие', company: 'Компания', platform: 'Платформа', popularity: 'Популярность',
     features: 'Функции', announcement: 'Объявление', archive: 'Архив', other: 'Другое'
   };
   const evKey = (e) => String(e.date || e.year || '');
 
   const DATE_NOTE = { approx: 'Приблизительная дата', year: 'Известен только год' };
 
-  function renderTimeline(events) {
+  const YT = /^(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/i;
+  const MEDIA_ICO = { video: '▶', image: '🖼', archive: '🕰', document: '📄' };
+  const MEDIA_LABEL = { video: 'Видео', image: 'Изображение', archive: 'Архивная страница', document: 'Документ' };
+
+  function renderMedia(list) {
+    const items = (Array.isArray(list) ? list : []).filter((m) => m && m.title && safeUrl(m.url) && MEDIA_LABEL[m.type]);
+    if (!items.length) return null;
+    const box = el('div', 'tl-media');
+    box.appendChild(el('p', 'tl-mh', 'Материалы'));
+    items.forEach((m) => {
+      const row = el('div', 'tl-m');
+      const a = el('a', null, `${MEDIA_ICO[m.type]} ${MEDIA_LABEL[m.type]}: ${m.title} ↗`);
+      a.href = m.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      row.appendChild(a);
+      const credit = [m.author && 'Автор: ' + m.author, m.source && 'Источник: ' + m.source].filter(Boolean).join(' · ');
+      if (credit) row.appendChild(el('span', 'muted', credit));
+      const yt = m.type === 'video' && m.url.match(YT);
+      if (yt) {
+        // Плеер подгружается только по нажатию: без лишних запросов к сторонним сайтам
+        const b = el('button', 'tl-toggle', '▶ Смотреть здесь'); b.type = 'button';
+        b.addEventListener('click', () => {
+          const f = document.createElement('iframe');
+          f.src = 'https://www.youtube-nocookie.com/embed/' + yt[1];
+          f.title = m.title; f.loading = 'lazy'; f.allowFullscreen = true;
+          f.setAttribute('allow', 'encrypted-media; picture-in-picture; fullscreen');
+          f.className = 'tl-video';
+          b.replaceWith(f);
+        });
+        row.appendChild(b);
+      }
+      box.appendChild(row);
+    });
+    return box;
+  }
+
+  function eventBlock(e, i) {
+    const st = Object.prototype.hasOwnProperty.call(STATUS_LABEL, e.status) ? e.status : 'unverified';
+    const card = el('article', 'tl-card ev st-' + st);
+    const when = typeof e.dateLabel === 'string' ? e.dateLabel : (ISO.test(e.date || '') ? fmtLong(e.date) : String(e.date || e.year || ''));
+    card.appendChild(el('div', 'tl-date', when));
+    card.appendChild(el('div', 'tl-label', e.label));
+    const tags = el('div', 'tl-tags');
+    tags.appendChild(el('span', 'tag st-' + st, STATUS_LABEL[st]));
+    if (e.dateType === 'approx') tags.appendChild(el('span', 'tag tg-approx', DATE_NOTE.approx));
+    if (CATEGORY_LABEL[e.category]) tags.appendChild(el('span', 'tag', CATEGORY_LABEL[e.category]));
+    card.appendChild(tags);
+    if (e.note) card.appendChild(el('p', 'tl-note', e.note));
+    const det = Array.isArray(e.details) ? e.details.filter((x) => typeof x === 'string') : [];
+    if (det.length) { const ul = el('ul', 'tl-det'); det.forEach((x) => ul.appendChild(el('li', null, x))); card.appendChild(ul); }
+    const srcs = Array.isArray(e.sources) ? e.sources.filter((x) => x && x.title) : [];
+    if (srcs.length) {
+      const ul = el('ul', 'tl-src');
+      srcs.forEach((x) => {
+        const l = el('li');
+        if (safeUrl(x.url)) { const a = el('a', null, x.title + ' ↗'); a.href = x.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; l.appendChild(a); }
+        else l.appendChild(el('span', 'muted', 'Источник: ' + x.title));
+        ul.appendChild(l);
+      });
+      card.appendChild(ul);
+    } else card.appendChild(el('p', 'tl-note muted', 'Источник не указан.'));
+    const m = renderMedia(e.media); if (m) card.appendChild(m);
+    return card;
+  }
+
+  function renderTimeline(events, years) {
     const ol = $('#timeline');
     ol.textContent = '';
     const list = events.filter((e) => e && e.label).map((e) => (e.status === 'partial' ? { ...e, status: 'indirect' } : e));
@@ -453,53 +517,27 @@
       });
     }
     list.sort((a, b) => evKey(a).localeCompare(evKey(b)) || (Number(a.year) || 0) - (Number(b.year) || 0));
-    list.forEach((e, i) => {
-      const st = Object.prototype.hasOwnProperty.call(STATUS_LABEL, e.status) ? e.status : 'unverified';
-      const li = el('li', 'st-' + st);
-      const dot = el('span', 'tl-dot st-' + st);
-      dot.setAttribute('role', 'img');
-      dot.setAttribute('aria-label', 'Статус: ' + STATUS_LABEL[st]);
-      li.appendChild(dot);
-      const card = el('div', 'tl-card');
-      const when = typeof e.dateLabel === 'string' ? e.dateLabel : (ISO.test(e.date || '') ? fmtLong(e.date) : String(e.date || e.year || ''));
-      card.appendChild(el('div', 'tl-date', when));
-      card.appendChild(el('div', 'tl-label', e.label));
-      if (e.note) card.appendChild(el('p', 'tl-note', e.note));
-      const tags = el('div', 'tl-tags');
-      tags.appendChild(el('span', 'tag st-' + st, STATUS_LABEL[st]));
-      if (e.dateType === 'approx') tags.appendChild(el('span', 'tag tg-approx', DATE_NOTE.approx));
-      if (CATEGORY_LABEL[e.category]) tags.appendChild(el('span', 'tag', CATEGORY_LABEL[e.category]));
-      card.appendChild(tags);
-
-      const det = Array.isArray(e.details) ? e.details.filter((x) => typeof x === 'string') : [];
-      const srcs = Array.isArray(e.sources) ? e.sources.filter((x) => x && x.title && safeUrl(x.url)) : [];
-      const more = el('div', 'tl-more'); more.id = 'tlm' + i; more.hidden = true;
-      if (det.length) { const ul = el('ul', 'tl-det'); det.forEach((x) => ul.appendChild(el('li', null, x))); more.appendChild(ul); }
-      more.appendChild(el('p', 'tl-note', `Достоверность: ${STATUS_LABEL[st]}.${DATE_NOTE[e.dateType] && e.dateType !== 'approx' ? ' ' + DATE_NOTE[e.dateType] + '.' : ''}`));
-      if (srcs.length) {
-        const ul = el('ul', 'tl-src');
-        srcs.forEach((x) => {
-          const l = el('li'); const a = el('a', null, x.title + ' ↗');
-          a.href = x.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-          l.appendChild(a); ul.appendChild(l);
-        });
-        more.appendChild(ul);
-      } else more.appendChild(el('p', 'tl-note muted', 'Источник не указан.'));
-      const btn = el('button', 'tl-toggle', 'Подробнее ▾');
-      btn.type = 'button'; btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', more.id);
-      btn.addEventListener('click', () => {
-        const open = more.hidden;
-        more.hidden = !open;
-        btn.setAttribute('aria-expanded', String(open));
-        btn.textContent = open ? 'Свернуть ▴' : 'Подробнее ▾';
-      });
-      card.append(btn, more);
-      li.appendChild(card);
+    allEvents = list;
+    const titles = new Map((Array.isArray(years) ? years : []).filter((y) => y && y.year).map((y) => [Number(y.year), y.title || '']));
+    list.forEach((e) => { const y = Number(e.year); if (y && !titles.has(y)) titles.set(y, ''); });
+    [...titles.keys()].sort((a, b) => a - b).forEach((y) => {
+      const evs = list.filter((e) => Number(e.year) === y);
+      const li = el('li', 'yr-item');
+      const d = el('details', 'yr' + (evs.length ? '' : ' yr-empty'));
+      const sm = el('summary');
+      sm.appendChild(el('span', 'yr-n', String(y)));
+      sm.appendChild(el('span', 'yr-t', titles.get(y) || ''));
+      sm.appendChild(el('span', 'yr-c', evs.length ? plural(evs.length, ['событие', 'события', 'событий']) : 'нет данных'));
+      d.appendChild(sm);
+      const body = el('div', 'yr-body');
+      if (evs.length) evs.forEach((e, i) => body.appendChild(eventBlock(e, i)));
+      else body.appendChild(el('p', 'tl-note muted', 'Архивных сведений пока недостаточно'));
+      d.appendChild(body);
+      li.appendChild(d);
       ol.appendChild(li);
     });
     $('#tlLegend').hidden = !list.length;
-    if (!list.length) ol.appendChild(el('li', null, 'Событий пока нет'));
-    allEvents = list;
+    if (!titles.size) ol.appendChild(el('li', null, 'Событий пока нет'));
   }
   let allEvents = [];
 
@@ -532,23 +570,47 @@
   }
 
   /* ---------- Сообщества ---------- */
+  const COMM_TYPES = [
+    ['official', 'Официальные', 'Сообщества и проекты разработчиков KoGaMa.'],
+    ['independent', 'Независимые проекты', 'Игровые платформы и проекты энтузиастов, не связанные с разработчиками.'],
+    ['fan', 'Фанатские сообщества', 'Серверы, сайты и группы игроков.']
+  ];
   function renderCommunities(list) {
     const box = $('#communities');
     box.textContent = '';
-    const items = list.filter(c => c && c.name && /^https?:\/\//i.test(c.url || ''));
+    const items = list.filter((c) => c && c.name && safeUrl(c.url));
     if (!items.length) {
       box.appendChild(el('div', 'placeholder', 'Ссылки на сообщества появятся позже'));
       return;
     }
-    items.forEach((c) => {
-      const a = el('a', 'card');
-      a.href = c.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      a.appendChild(el('div', 'card-name', c.name));
-      if (c.desc) a.appendChild(el('p', 'card-desc', c.desc));
-      let host = '';
-      try { host = new URL(c.url).hostname; } catch {}
-      a.appendChild(el('div', 'card-host', host));
-      box.appendChild(a);
+    const sorted = [...items].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    COMM_TYPES.forEach(([type, title, lead]) => {
+      const group = sorted.filter((c) => (c.type || 'fan') === type);
+      if (!group.length) return;
+      const h = el('h3', 'cm-h', title); box.appendChild(h);
+      box.appendChild(el('p', 'cm-lead', lead));
+      const cards = el('div', 'cards');
+      group.forEach((c) => {
+        const a = el('a', 'card cm-card' + (c.pinned ? ' pinned' : '') + (type === 'official' ? ' official' : ''));
+        a.href = c.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        const head = el('div', 'card-head');
+        let ico;
+        if (typeof c.icon === 'string' && /^img\/[\w./-]+$/.test(c.icon)) { ico = el('img', 'cm-ico'); ico.src = c.icon; ico.alt = ''; ico.loading = 'lazy'; }
+        else { ico = el('span', 'cm-ico cm-ico-ph', c.name.trim().charAt(0).toUpperCase()); }
+        ico.setAttribute('aria-hidden', 'true');
+        head.append(ico, el('div', 'card-name', c.name));
+        a.appendChild(head);
+        const badges = el('div', 'card-meta');
+        if (c.pinned) badges.appendChild(el('span', 'badge cm-pin', '📌 Закреплено'));
+        if (type === 'official') badges.appendChild(el('span', 'badge cm-off', 'Официальное'));
+        if (c.status && !(type === 'official' && c.status === 'Официальное')) badges.appendChild(el('span', 'badge', c.status));
+        a.appendChild(badges);
+        if (c.desc) a.appendChild(el('p', 'card-desc', c.desc));
+        let host = ''; try { host = new URL(c.url).hostname; } catch {}
+        a.appendChild(el('div', 'card-host', host));
+        cards.appendChild(a);
+      });
+      box.appendChild(cards);
     });
   }
 
@@ -904,7 +966,7 @@
   }
 
   /* ---------- Главная ---------- */
-  function renderHome(docs) {
+  function renderHome(docs, commCount) {
     const t = $('#homeTiles'); t.textContent = '';
     const mk = (href, title, n, text) => {
       const a = el('a', 'tile'); a.href = href;
@@ -915,6 +977,7 @@
     const nEv = allEvents.length, nPts = trafficPts.length;
     mk('#history', 'История платформы', nEv || null, nEv ? plural(nEv, ['событие', 'события', 'событий']) + ' в хронологии' : 'События появятся позже');
     mk('#stats', 'Архив статистики', nPts || null, nPts ? plural(nPts, ['замер', 'замера', 'замеров']) + ' посещаемости' : 'Ожидание первых данных');
+    mk('#communities', 'Сообщества', commCount || null, commCount ? plural(commCount, ['сообщество', 'сообщества', 'сообществ']) + ' в каталоге' : 'Каталог пополняется');
     mk('#gallery', 'Исторические материалы', gallery.length || null, gallery.length ? plural(gallery.length, ['изображение', 'изображения', 'изображений']) : 'Архив пополняется');
     mk('#sources', 'Источники информации', docs.length || null, docs.length ? plural(docs.length, ['документ', 'документа', 'документов']) + ' и 5 категорий достоверности' : '5 категорий достоверности');
     // Фон: только настоящий архивный материал, помеченный в gallery.json как hero и подтверждённый
@@ -927,7 +990,7 @@
   }
 
   /* ---------- Навигация между разделами ---------- */
-  const VIEWS = ['home', 'stats', 'history', 'gallery', 'compare', 'analytics', 'sources', 'changelog'];
+  const VIEWS = ['home', 'stats', 'history', 'communities', 'gallery', 'compare', 'analytics', 'sources', 'changelog'];
   const TITLES = { home: 'История и статистика KoGaMa', stats: 'Статистика', history: 'История KoGaMa', gallery: 'Галерея', compare: 'KoGaMa тогда и сейчас', analytics: 'Аналитика', sources: 'Источники', changelog: 'Журнал изменений' };
   let firstRoute = true;
   function route() {
@@ -950,7 +1013,7 @@
 
   /* ---------- Старт ---------- */
   (async () => {
-    const [traffic, events, communities, documents, changelog, galleryRaw, pairsRaw, meta, ver] = await Promise.all([
+    const [traffic, events, communities, documents, changelog, galleryRaw, pairsRaw, meta, ver, years] = await Promise.all([
       loadJSON('data/traffic.json', []),
       loadJSON('data/events.json', []),
       loadJSON('data/communities.json', []),
@@ -959,7 +1022,8 @@
       loadJSON('data/gallery.json', []),
       loadJSON('data/compare.json', []),
       loadMeta('data/meta.json'),
-      loadMeta('version.json')
+      loadMeta('version.json'),
+      loadJSON('data/years.json', [])
     ]);
     try {
       trafficPts = cleanTraffic(traffic);
@@ -967,7 +1031,7 @@
       renderStats(meta);
       syncRange();
       route();
-      renderTimeline(events);
+      renderTimeline(events, years);
       renderAnalytics();
       renderInventory();
       renderDocuments(documents);
@@ -975,7 +1039,7 @@
       renderChangelog(changelog, meta, ver);
       gallery = cleanGallery(galleryRaw); pairsData = pairsRaw;
       renderGallery(); renderPairs(); renderPeriodCmp();
-      renderHome(documents.filter((d) => d && d.title && safeUrl(d.url)));
+      renderHome(documents.filter((d) => d && d.title && safeUrl(d.url)), communities.filter((c) => c && c.name && safeUrl(c.url)).length);
       const lv = changelog.find((e) => e && e.version);
       $('#footVer').textContent = lv ? `Версия сайта ${lv.version}` : '';
       showLoadErrors();

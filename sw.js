@@ -1,7 +1,7 @@
 // Service Worker KOGAMA ARCHIVE.
 // VERSION подставляется скриптом scripts/stamp-version.js (хеш содержимого ресурсов).
 // Любое изменение HTML/CSS/JS/иконок меняет VERSION -> меняется sw.js -> браузер ставит новую версию.
-const VERSION = 'a2cfe02bccda';
+const VERSION = '540815f50b67';
 const SHELL_CACHE = 'archive-shell-' + VERSION; // оболочка сайта: целиком одной версии
 const DATA_CACHE = 'archive-data';              // JSON-данные: живут между версиями, нужны для офлайна
 const IMG_CACHE = 'archive-img';                // архивные изображения: файлы не меняются, грузим один раз
@@ -16,7 +16,7 @@ const OPTIONAL = ['./', './manifest.json', './icons/icon-192.png', './icons/icon
 const DATA = [
   './data/traffic.json', './data/meta.json', './data/events.json',
   './data/communities.json', './data/documents.json', './data/changelog.json',
-  './data/gallery.json', './data/compare.json', './version.json'
+  './data/gallery.json', './data/compare.json', './data/years.json', './version.json'
 ];
 
 const fresh = (u) => new Request(u, { cache: 'reload' }); // в обход HTTP-кэша GitHub Pages (max-age=600)
